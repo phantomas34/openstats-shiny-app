@@ -1,0 +1,12 @@
+# Ignore renv files to prevent conflicts inside the container
+renv.lock
+renv/
+.Rprofile
+
+# Ignore local user files
+.Rproj.user/
+.Rhistory
+
+# Ignore git files
+.gitignore
+.git/
