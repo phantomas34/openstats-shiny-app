@@ -937,41 +937,98 @@ server <- function(input, output, session) {
     })
   })
   
-  observeEvent(input$run_regression, {
+  # --- START: New, Upgraded Regression Logic ---
+  
+  # We create a reactive value to hold our regression model.
+  # This is more efficient as we only compute the model once when the button is clicked.
+  regression_model_r <- eventReactive(input$run_regression, {
     df <- data_r()
     req(df, input$regression_dv, input$regression_iv)
     
     dv <- input$regression_dv
     ivs <- input$regression_iv
     
+    # --- Input Validation ---
     if (!is.numeric(df[[dv]])) {
-      showNotification("Dependent variable for regression must be numeric.", type = "warning")
-      return(NULL)
+      showNotification("Dependent variable must be numeric.", type = "warning")
+      return(NULL) # Stop execution and return NULL
     }
     if (length(ivs) == 0) {
-      showNotification("Please select at least one independent variable for regression.", type = "warning")
+      showNotification("Please select at least one independent variable.", type = "warning")
       return(NULL)
     }
     if (!all(sapply(df[ivs], is.numeric))) {
-      showNotification("All independent variables for regression must be numeric.", type = "warning")
+      showNotification("All independent variables must be numeric.", type = "warning")
       return(NULL)
     }
     
-    output$regression_summary <- renderPrint({
-      formula_str <- paste(dv, "~", paste(ivs, collapse = " + "))
-      model <- lm(as.formula(formula_str), data = df)
-      model_summary <- summary(model)
-      
-      r_squared <- model_summary$r.squared
-      r_value <- sqrt(r_squared)
-      
-      cat("Linear Regression Summary:\n")
-      print(model_summary)
-      cat("\n")
-      cat("R-squared:", round(r_squared, 4), "\n")
-      cat("R (correlation):", round(r_value, 4), "\n")
-    })
+    # --- Model Calculation ---
+    formula_str <- paste(dv, "~", paste(ivs, collapse = " + "))
+    model <- lm(as.formula(formula_str), data = df)
+    
+    # Return the fully calculated model object
+    return(model)
   })
+  
+  # --- Output 1: The Regression Summary Tab ---
+  # This render function now pulls from our reactive model object.
+  output$regression_summary <- renderPrint({
+    model <- regression_model_r()
+    req(model) # Ensures the model is valid before trying to print
+    
+    model_summary <- summary(model)
+    r_squared <- model_summary$r.squared
+    
+    cat("Linear Regression Summary:\n")
+    print(model_summary)
+    cat("\n")
+    cat("R-squared:", round(r_squared, 4), "\n")
+    # Only show 'R' for simple linear regression (one IV)
+    if (length(all.vars(formula(model))) == 2) {
+      cat("R (correlation):", round(sqrt(r_squared), 4), "\n")
+    }
+  })
+  
+  # --- Output 2: The NEW Diagnostic Plots Tab ---
+  output$regression_diagnostic_plots <- renderPlot({
+    model <- regression_model_r()
+    req(model)
+    
+    # Set up a 2x2 grid for the plots
+    par(mfrow = c(2, 2))
+    
+    # This single command automatically generates the 4 standard diagnostic plots
+    plot(model)
+    
+    # Always reset the plotting layout back to a 1x1 grid
+    par(mfrow = c(1, 1))
+  })
+  
+  # --- Output 3: The NEW Assumption Checks Tab ---
+  output$regression_assumption_checks <- renderPrint({
+    model <- regression_model_r()
+    req(model)
+    
+    # Get the names of the independent variables from the model object
+    ivs <- all.vars(formula(model))[-1] 
+    
+    # VIF is only applicable for multiple regression (2 or more IVs)
+    if (length(ivs) > 1) {
+      cat("Variance Inflation Factor (VIF):\n")
+      cat("---------------------------------\n")
+      cat("Rule of thumb: VIF > 5 suggests potential multicollinearity.\n")
+      cat("VIF > 10 suggests probable multicollinearity.\n\n")
+      
+      # The 'car' library is already loaded from global.R
+      vif_results <- car::vif(model)
+      print(vif_results)
+    } else {
+      cat("Variance Inflation Factor (VIF) is not applicable for simple linear regression.\n")
+      cat("It is a measure of multicollinearity among two or more independent variables.")
+    }
+  })
+  
+  # --- END: New, Upgraded Regression Logic ---
   
   observeEvent(input$run_correlation, {
     df <- data_r()

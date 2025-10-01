@@ -109,17 +109,36 @@ ui <- page_sidebar(
                    inferential_tab_ui 
   ),
   
+  # --- START: Corrected Regression & Correlation Panel ---
+  
   conditionalPanel("input.main_nav == 'Regression & Correlation'",
                    h2("Regression and Correlation"),
                    layout_columns(
                      col_widths = c(6, 6),
+                     
+                     # --- Card 1: Linear Regression (with the new tabs) ---
                      card(
                        card_header("Linear Regression"),
                        uiOutput("select_regression_dv"),
                        uiOutput("select_regression_iv"),
                        actionButton("run_regression", "Run Linear Regression"),
-                       verbatimTextOutput("regression_summary")
-                     ),
+                       
+                       # This is the new tabset you added
+                       navset_card_tab(
+                         id = "regression_output_tabs",
+                         nav_panel("Summary", 
+                                   verbatimTextOutput("regression_summary")
+                         ),
+                         nav_panel("Diagnostic Plots", 
+                                   plotOutput("regression_diagnostic_plots")
+                         ),
+                         nav_panel("Assumption Checks", 
+                                   verbatimTextOutput("regression_assumption_checks")
+                         )
+                       )
+                     ), # <-- THIS COMMA IS THE CRITICAL PIECE THAT WAS LIKELY MISSING
+                     
+                     # --- Card 2: Correlation Matrix (unchanged) ---
                      card(
                        card_header("Correlation Matrix"),
                        uiOutput("select_correlation_vars"),
@@ -128,6 +147,8 @@ ui <- page_sidebar(
                      )
                    )
   ),
+  
+  # --- END: Corrected Regression & Correlation Panel ---
   
   conditionalPanel("input.main_nav == 'Probability'",
                    h2("Probability Distributions and Calculations"),
