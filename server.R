@@ -241,6 +241,9 @@ server <- function(input, output, session) {
       output$select_regression_dv <- renderUI({ selectInput("regression_dv", "Dependent Variable (Numeric)", choices = c("", numeric_cols)) })
       output$select_regression_iv <- renderUI({ selectInput("regression_iv", "Independent Variable(s) (Numeric)", choices = numeric_cols, multiple = TRUE) })
       output$select_correlation_vars <- renderUI({ selectInput("correlation_vars", "Select Variables for Correlation (Numeric)", choices = numeric_cols, multiple = TRUE) })
+      # --- Additions for Logistic Regression ---
+      output$select_logistic_dv <- renderUI({ selectInput("logistic_dv", "Dependent Variable (Binary/Categorical):", choices = c("", all_cols)) })
+      output$select_logistic_iv <- renderUI({ selectInput("logistic_iv", "Independent Variable(s):", choices = all_cols, multiple = TRUE) })
     } else {
       # Clear UI when no data is loaded
       output$select_descriptive_variable <- renderUI({ selectInput("descriptive_variable", "Select Variable", choices = "") })
@@ -1127,6 +1130,54 @@ server <- function(input, output, session) {
       print(round(corr_matrix, 4))
     })
   })
+  # --- START: New Logistic Regression Logic ---
+  
+  observeEvent(input$run_logistic, {
+    df <- data_r()
+    req(df, input$logistic_dv, input$logistic_iv)
+    
+    dv <- input$logistic_dv
+    ivs <- input$logistic_iv
+    
+    # --- Validation ---
+    df_model <- df %>% select(all_of(c(dv, ivs))) %>% na.omit()
+    
+    # Ensure the DV is binary (has exactly 2 unique levels)
+    unique_dv <- unique(df_model[[dv]])
+    if (length(unique_dv) != 2) {
+      showNotification("Dependent variable for logistic regression must have exactly two unique outcomes (e.g., Yes/No, 1/0, True/False).", type = "error", duration = 10)
+      return(NULL)
+    }
+    
+    # Convert DV to a factor to ensure glm() works correctly
+    df_model[[dv]] <- as.factor(df_model[[dv]])
+    
+    # --- Model Calculation ---
+    output$logistic_summary <- renderPrint({
+      formula_str <- paste(dv, "~", paste(ivs, collapse = " + "))
+      
+      # Use glm() with family = "binomial" for logistic regression
+      model <- glm(as.formula(formula_str), data = df_model, family = "binomial")
+      
+      model_summary <- summary(model)
+      
+      cat("Logistic Regression Summary:\n")
+      print(model_summary)
+      
+      cat("\n-------------------------------------------------\n")
+      cat("Odds Ratios (Exponentiated Coefficients):\n")
+      cat("-------------------------------------------------\n")
+      cat("Rule of thumb:\n")
+      cat(" - Odds Ratio > 1: Increases the odds of the outcome.\n")
+      cat(" - Odds Ratio < 1: Decreases the odds of the outcome.\n\n")
+      
+      # Calculate and print odds ratios
+      odds_ratios <- exp(coef(model))
+      print(odds_ratios)
+    })
+  })
+  
+  # --- END: New Logistic Regression Logic ---
   
   # --- PROBABILITY LOGIC ---
   

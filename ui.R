@@ -109,43 +109,65 @@ ui <- page_sidebar(
                    inferential_tab_ui 
   ),
   
-  # --- START: Corrected Regression & Correlation Panel ---
+  
+  # --- START: New Regression & Correlation Panel Layout ---
   
   conditionalPanel("input.main_nav == 'Regression & Correlation'",
                    h2("Regression and Correlation"),
-                   layout_columns(
-                     col_widths = c(6, 6),
-                     
-                     # --- Card 1: Linear Regression (with the new tabs) ---
-                     card(
-                       card_header("Linear Regression"),
-                       uiOutput("select_regression_dv"),
-                       checkboxInput("log_transform_dv_reg", "Apply Log Transform to Dependent Variable (for skew)"),
-                       uiOutput("select_regression_iv"),
-                       actionButton("run_regression", "Run Linear Regression"),
-                       
-                       # This is the new tabset you added
-                       navset_card_tab(
-                         id = "regression_output_tabs",
-                         nav_panel("Summary", 
-                                   verbatimTextOutput("regression_summary")
-                         ),
-                         nav_panel("Diagnostic Plots", 
-                                   plotOutput("regression_diagnostic_plots")
-                         ),
-                         nav_panel("Assumption Checks", 
-                                   verbatimTextOutput("regression_assumption_checks")
+                   
+                   # Changed from layout_columns to a single-column flow
+                   
+                   # Card 1: Linear Regression (unchanged content, just in a full-width card)
+                   card(
+                     card_header("Linear Regression"),
+                     layout_columns(
+                       col_widths = c(4, 8), # Internal layout for inputs
+                       card_body(
+                         uiOutput("select_regression_dv"),
+                         checkboxInput("log_transform_dv_reg", "Apply Log Transform to Dependent Variable (for skew)"),
+                         uiOutput("select_regression_iv"),
+                         actionButton("run_regression", "Run Linear Regression")
+                       ),
+                       card_body(
+                         navset_card_tab(
+                           id = "regression_output_tabs",
+                           nav_panel("Summary", verbatimTextOutput("regression_summary")),
+                           nav_panel("Diagnostic Plots", plotOutput("regression_diagnostic_plots")),
+                           nav_panel("Assumption Checks", verbatimTextOutput("regression_assumption_checks"))
                          )
                        )
-                     ), # <-- THIS COMMA IS THE CRITICAL PIECE THAT WAS LIKELY MISSING
-                     
-                     # --- Card 2: Correlation Matrix (unchanged) ---
-                     card(
-                       card_header("Correlation Matrix"),
-                       uiOutput("select_correlation_vars"),
-                       actionButton("run_correlation", "Calculate Correlation"),
-                       verbatimTextOutput("correlation_matrix")
                      )
+                   ),
+                   
+                   # Card 2: THE NEW Logistic Regression Module
+                   card(
+                     card_header("Logistic Regression"),
+                     card_body(
+                       with_info_popover(
+                         ui_element = p("Use for modeling a binary outcome (e.g., Yes/No, 1/0)."),
+                         title = "What is Logistic Regression?",
+                         content = "Logistic Regression predicts the probability of an outcome occurring. It's used when your dependent variable has only two categories."
+                       )
+                     ),
+                     layout_columns(
+                       col_widths = c(4, 8), # Internal layout for inputs/outputs
+                       card_body(
+                         uiOutput("select_logistic_dv"),
+                         uiOutput("select_logistic_iv"),
+                         actionButton("run_logistic", "Run Logistic Regression")
+                       ),
+                       card_body(
+                         verbatimTextOutput("logistic_summary")
+                       )
+                     )
+                   ),
+                   
+                   # Card 3: Correlation Matrix (unchanged content, just in a full-width card)
+                   card(
+                     card_header("Correlation Matrix"),
+                     uiOutput("select_correlation_vars"),
+                     actionButton("run_correlation", "Calculate Correlation"),
+                     verbatimTextOutput("correlation_matrix")
                    )
   ),
   
