@@ -284,7 +284,20 @@ server <- function(input, output, session) {
     output$prop_variable_ui <- renderUI({ selectInput("prop_variable", "Select a categorical variable:", choices = c("", char_factor_cols)) })
     output$two_prop_var_ui <- renderUI({ selectInput("prop_var", "Select Proportion Variable:", choices = c("", char_factor_cols)) })
     output$two_prop_group_var_ui <- renderUI({ selectInput("two_prop_group_var", "Select Grouping Variable:", choices = c("", char_factor_cols)) })
-  })
+ 
+    # --- START: New Dropdowns for Non-Parametric Tests ---
+    
+    # Mann-Whitney U Test
+    output$select_mw_variable <- renderUI({ selectInput("mw_variable", "Numeric Variable:", choices = c("", numeric_cols)) })
+    output$select_mw_group    <- renderUI({ selectInput("mw_group", "Grouping Variable (must have 2 levels):", choices = c("", char_factor_cols)) })
+    
+    # Kruskal-Wallis Test
+    output$select_kw_variable <- renderUI({ selectInput("kw_variable", "Numeric Variable:", choices = c("", numeric_cols)) })
+    output$select_kw_group    <- renderUI({ selectInput("kw_group", "Grouping Variable (2+ levels):", choices = c("", char_factor_cols)) })
+    
+    # --- END: New Dropdowns for Non-Parametric Tests ---
+    
+     })
   
   # Observer for One-Proportion Test's 'Success Value' dropdown
   observe({
@@ -1395,5 +1408,59 @@ server <- function(input, output, session) {
            x = "Number of Events (k)", y = "Probability") +
       scale_x_continuous(breaks = x_vals[x_vals %% 1 == 0])
   })
+  # --- START: New Logic for Non-Parametric Analyses ---
   
+  # --- Mann-Whitney U Test Logic ---
+  observeEvent(input$run_mw_test, {
+    df <- data_r()
+    req(df, input$mw_variable, input$mw_group)
+    
+    dv <- input$mw_variable
+    iv <- input$mw_group
+    
+    # Validation
+    df_clean <- df %>% filter(!is.na(.data[[dv]]) & !is.na(.data[[iv]]))
+    df_clean[[iv]] <- as.factor(df_clean[[iv]])
+    
+    if (nlevels(df_clean[[iv]]) != 2) {
+      showNotification("Grouping variable for Mann-Whitney U test must have exactly two levels.", type = "error")
+      return(NULL)
+    }
+    
+    output$mw_test_output <- renderPrint({
+      formula_str <- paste(dv, "~", iv)
+      test_result <- wilcox.test(as.formula(formula_str), data = df_clean)
+      
+      cat("Mann-Whitney U Test (Wilcoxon rank sum test)\n")
+      cat("--------------------------------------------\n")
+      print(test_result)
+    })
+  })
+  
+  # --- Kruskal-Wallis Test Logic ---
+  observeEvent(input$run_kw_test, {
+    df <- data_r()
+    req(df, input$kw_variable, input$kw_group)
+    
+    dv <- input$kw_variable
+    iv <- input$kw_group
+    
+    # Validation
+    df_clean <- df %>% filter(!is.na(.data[[dv]]) & !is.na(.data[[iv]]))
+    if(nrow(df_clean) < 1) {
+      showNotification("No valid data for the selected variables.", type = "error")
+      return(NULL)
+    }
+    
+    output$kw_test_output <- renderPrint({
+      formula_str <- paste(dv, "~", iv)
+      test_result <- kruskal.test(as.formula(formula_str), data = df_clean)
+      
+      cat("Kruskal-Wallis rank sum test\n")
+      cat("------------------------------\n")
+      print(test_result)
+    })
+  })
+  
+  # --- END: New Logic for Non-Parametric Analyses ---
 }

@@ -122,5 +122,33 @@ inferential_tab_ui <- accordion(
     uiOutput("select_anova_iv2"),
     actionButton("run_anova", "Run ANOVA"),
     verbatimTextOutput("anova_output")
+  ),
+  
+  # Panel 5: Non-Parametric Tests
+  accordion_panel(
+    title = "Non-Parametric Tests",
+    
+    with_info_popover(
+      ui_element = h4("Mann-Whitney U Test"),
+      title = "What is the Mann-Whitney U Test?",
+      content = "Also known as the Wilcoxon Rank-Sum test, this is the non-parametric alternative to the independent two-sample t-test. Use it to compare two groups when the data is not normally distributed."
+    ),
+    uiOutput("select_mw_variable"),
+    uiOutput("select_mw_group"),
+    actionButton("run_mw_test", "Run Mann-Whitney Test"),
+    verbatimTextOutput("mw_test_output"),
+    
+    hr(),
+    
+    with_info_popover(
+      ui_element = h4("Kruskal-Wallis Test"),
+      title = "What is the Kruskal-Wallis Test?",
+      content = "This is the non-parametric alternative to the one-way ANOVA. Use it to compare three or more groups when the data is not normally distributed."
+    ),
+    uiOutput("select_kw_variable"),
+    uiOutput("select_kw_group"),
+    actionButton("run_kw_test", "Run Kruskal-Wallis Test"),
+    verbatimTextOutput("kw_test_output")
   )
-)
+  
+) # This is the final closing parenthesis for the entire accordion()
