@@ -120,6 +120,7 @@ ui <- page_sidebar(
                      card(
                        card_header("Linear Regression"),
                        uiOutput("select_regression_dv"),
+                       checkboxInput("log_transform_dv_reg", "Apply Log Transform to Dependent Variable (for skew)"),
                        uiOutput("select_regression_iv"),
                        actionButton("run_regression", "Run Linear Regression"),
                        

@@ -119,6 +119,7 @@ inferential_tab_ui <- accordion(
     ),
     uiOutput("select_anova_dv"),
     uiOutput("select_anova_iv"),
+    uiOutput("select_anova_iv2"),
     actionButton("run_anova", "Run ANOVA"),
     verbatimTextOutput("anova_output")
   )

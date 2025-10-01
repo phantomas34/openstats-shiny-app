@@ -258,7 +258,11 @@ server <- function(input, output, session) {
   observe({
     df <- data_r()
     numeric_cols <- if (is.null(df)) "" else names(df)[sapply(df, is.numeric)]
-    char_factor_cols <- if (is.null(df)) "" else names(df)[sapply(df, function(x) is.character(x) || is.factor(x))]
+    c# --- START: New, Smarter Categorical Column Logic ---
+    char_factor_cols <- if (is.null(df)) "" else names(df)[sapply(df, function(x) {
+      is.character(x) || is.factor(x) || (is.numeric(x) && length(unique(x)) < 15)
+    })]
+    # --- END: New, Smarter Categorical Column Logic ---
     
     # Mean Tests Panel
     output$select_ht_variable <- renderUI({ selectInput("ht_variable", "Select Variable for t-test (Numeric)", choices = c("", numeric_cols)) })
@@ -267,6 +271,9 @@ server <- function(input, output, session) {
     output$paired_var2_ui <- renderUI({ selectInput("paired_var2", "Select Second Variable (Numeric):", choices = c("", numeric_cols)) })
     output$select_anova_dv <- renderUI({ selectInput("anova_dv", "Dependent Variable (Numeric)", choices = c("", numeric_cols)) })
     output$select_anova_iv <- renderUI({ selectInput("anova_iv", "Independent Variable (Categorical)", choices = c("", char_factor_cols)) })
+    output$select_anova_iv2 <- renderUI({ 
+      selectInput("anova_iv2", "Second Independent Variable (Optional)", choices = c("None", char_factor_cols)) 
+    })
     
     # Categorical & Normality Panels
     output$select_chi_x <- renderUI({ selectInput("chi_x", "Row Variable (Categorical)", choices = c("", char_factor_cols)) })
@@ -618,36 +625,80 @@ server <- function(input, output, session) {
   
   # --- All Inferential and Regression Logic ---
   
+  # --- START: Upgraded ANOVA Logic ---
+  
   observeEvent(input$run_anova, {
     df <- data_r()
     req(df, input$anova_dv, input$anova_iv)
     dv <- input$anova_dv
-    iv <- input$anova_iv
+    iv1 <- input$anova_iv
+    iv2 <- input$anova_iv2 # Get the value from our new dropdown
     
+    # --- Validation ---
     if (!is.numeric(df[[dv]])) {
-      showNotification("Dependent variable for ANOVA must be numeric.", type = "warning")
+      showNotification("Dependent variable must be numeric.", type = "warning")
       return(NULL)
     }
-    if (!is.character(df[[iv]]) && !is.factor(df[[iv]])) {
-      showNotification("Independent variable for ANOVA must be categorical.", type = "warning")
+    if (!is.factor(df[[iv1]]) && !is.character(df[[iv1]])) {
+      showNotification("First independent variable must be categorical.", type = "warning")
       return(NULL)
     }
-    df[[iv]] <- as.factor(df[[iv]])
     
+    # Make sure categorical variables are treated as factors for the model
+    df[[iv1]] <- as.factor(df[[iv1]])
+    
+    # --- Dynamic Model Building ---
     output$anova_output <- renderPrint({
-      formula_str <- paste(dv, "~", iv)
-      model <- aov(as.formula(formula_str), data = df)
-      cat("ANOVA Summary:\n")
-      print(summary(model))
-      cat("\nPost-Hoc Test (Tukey HSD) if significant:\n")
-      if (summary(model)[[1]]$`Pr(>F)`[1] < 0.05) {
-        print(TukeyHSD(model))
+      
+      # Check if a second IV was selected
+      if (!is.null(iv2) && iv2 != "None") {
+        # --- TWO-WAY ANOVA LOGIC ---
+        # The incorrect check has been removed.
+        # This next line now handles both numeric-as-category and text variables correctly.
+        df[[iv2]] <- as.factor(df[[iv2]])
+        
+        # The "*" creates main effects for both IVs AND their interaction term
+        formula_str <- paste(dv, "~", iv1, "*", iv2)
+        model <- aov(as.formula(formula_str), data = df)
+        
+        # The "*" creates main effects for both IVs AND their interaction term
+        formula_str <- paste(dv, "~", iv1, "*", iv2)
+        model <- aov(as.formula(formula_str), data = df)
+        
+        cat("Two-Way ANOVA Summary (", formula_str, "):\n", sep = "")
+        model_summary <- summary(model)
+        print(model_summary)
+        
+        # Check if any part of the model is significant
+        if (any(model_summary[[1]]$`Pr(>F)` < 0.05, na.rm = TRUE)) {
+          cat("\n-----------------------------------\n")
+          cat("Post-Hoc Test (Tukey HSD):\n")
+          print(TukeyHSD(model))
+        } else {
+          cat("\nNo significant main effects or interactions found.\n")
+        }
+        
       } else {
-        cat("No significant differences found, no post-hoc test performed.\n")
+        # --- ONE-WAY ANOVA LOGIC (Original functionality) ---
+        formula_str <- paste(dv, "~", iv1)
+        model <- aov(as.formula(formula_str), data = df)
+        
+        cat("One-Way ANOVA Summary (", formula_str, "):\n", sep = "")
+        model_summary <- summary(model)
+        print(model_summary)
+        
+        if (model_summary[[1]]$`Pr(>F)`[1] < 0.05) {
+          cat("\n-----------------------------------\n")
+          cat("Post-Hoc Test (Tukey HSD):\n")
+          print(TukeyHSD(model))
+        } else {
+          cat("\nNo significant differences found between groups.\n")
+        }
       }
     })
   })
   
+  # --- END: Upgraded ANOVA Logic ---
   observeEvent(input$run_prop_test, {
     # This logic now handles both manual and data-driven modes
     
@@ -937,10 +988,8 @@ server <- function(input, output, session) {
     })
   })
   
-  # --- START: New, Upgraded Regression Logic ---
+  # --- START: Updated eventReactive with Transformation Logic ---
   
-  # We create a reactive value to hold our regression model.
-  # This is more efficient as we only compute the model once when the button is clicked.
   regression_model_r <- eventReactive(input$run_regression, {
     df <- data_r()
     req(df, input$regression_dv, input$regression_iv)
@@ -948,27 +997,48 @@ server <- function(input, output, session) {
     dv <- input$regression_dv
     ivs <- input$regression_iv
     
-    # --- Input Validation ---
-    if (!is.numeric(df[[dv]])) {
+    # --- NEW: Transformation Logic ---
+    # Create a temporary data frame for this model to avoid changing the original data
+    df_model <- df 
+    
+    if (isTRUE(input$log_transform_dv_reg)) {
+      # Check for non-positive values before transforming
+      if (any(df_model[[dv]] <= 0, na.rm = TRUE)) {
+        # Use log1p(x) which is log(x+1) - safer for data with zeros
+        showNotification(
+          "Warning: Dependent variable contains 0 or negative values. Using log(x+1) transformation.",
+          type = "warning",
+          duration = 8 # Show for 8 seconds
+        )
+        df_model[[dv]] <- log1p(df_model[[dv]])
+      } else {
+        df_model[[dv]] <- log(df_model[[dv]])
+      }
+    }
+    # --- END: Transformation Logic ---
+    
+    # --- Input Validation (now uses the potentially modified df_model for the DV check) ---
+    if (!is.numeric(df_model[[dv]])) {
       showNotification("Dependent variable must be numeric.", type = "warning")
-      return(NULL) # Stop execution and return NULL
+      return(NULL)
     }
     if (length(ivs) == 0) {
       showNotification("Please select at least one independent variable.", type = "warning")
       return(NULL)
     }
-    if (!all(sapply(df[ivs], is.numeric))) {
+    if (!all(sapply(df_model[ivs], is.numeric))) {
       showNotification("All independent variables must be numeric.", type = "warning")
       return(NULL)
     }
     
-    # --- Model Calculation ---
+    # --- Model Calculation (now uses df_model) ---
     formula_str <- paste(dv, "~", paste(ivs, collapse = " + "))
-    model <- lm(as.formula(formula_str), data = df)
+    model <- lm(as.formula(formula_str), data = df_model)
     
-    # Return the fully calculated model object
     return(model)
   })
+  
+  # --- END: Updated eventReactive ---
   
   # --- Output 1: The Regression Summary Tab ---
   # This render function now pulls from our reactive model object.
