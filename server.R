@@ -342,6 +342,8 @@ server <- function(input, output, session) {
     
     # --- START: Final Corrected Summary/Distribution Table Logic ---
     
+    # --- START: Definitive Corrected Summary/Distribution Table Logic ---
+    
     output$summary_stats_output <- renderPrint({
       req(df, input$descriptive_variable)
       var_name <- input$descriptive_variable
@@ -351,13 +353,11 @@ server <- function(input, output, session) {
         return()
       }
       
-      # --- The DEFINITIVE FIX is in this condition ---
-      # We check if the variable is considered "categorical-like" by our smart logic.
       is_categorical_like <- is.character(df[[var_name]]) || is.factor(df[[var_name]]) || 
         (is.numeric(df[[var_name]]) && length(unique(na.omit(df[[var_name]]))) < 15)
       
       if (is_categorical_like) {
-        # --- Logic for CATEGORICAL variables (will now correctly run for 'cyl') ---
+        # --- Logic for CATEGORICAL variables ---
         cat("Frequency Distribution Table:\n\n")
         
         summary_table <- df %>%
@@ -365,15 +365,16 @@ server <- function(input, output, session) {
           count(.data[[var_name]], name = "Frequency") %>%
           mutate(Relative_Frequency = scales::percent(Frequency / sum(Frequency), accuracy = 0.1))
         
-        print(summary_table)
+        # Convert to a standard data.frame for clean printing
+        print(as.data.frame(summary_table))
         
       } else {
-        # --- Logic for truly NUMERIC variables (like 'mpg') ---
+        # --- Logic for truly NUMERIC variables ---
         cat("Descriptive Statistics:\n\n")
         
-        # We now use group_by logic only if a group is selected.
         group_var <- input$group_by_variable
         if (group_var != "None" && group_var %in% names(df)) {
+          # --- Grouped NUMERIC summary ---
           grouped_summary <- df %>%
             group_by(.data[[group_var]]) %>%
             summarise(
@@ -384,28 +385,31 @@ server <- function(input, output, session) {
               Min = min(.data[[var_name]], na.rm = TRUE),
               Q1 = as.numeric(quantile(.data[[var_name]], 0.25, na.rm = TRUE)),
               Q3 = as.numeric(quantile(.data[[var_name]], 0.75, na.rm = TRUE)),
-              Max = max(.data[[var_name]], na.rm = TRUE),
-              .groups = "drop"
+              Max = max(.data[[var_name]], na.rm = TRUE)
             )
-          print(grouped_summary)
+          
+          # --- THE DEFINITIVE FIX: Convert to data.frame before printing ---
+          print(as.data.frame(grouped_summary))
+          
         } else {
-          # This part creates the summary for a single numeric variable
+          # --- Single NUMERIC summary ---
           summary_df <- data.frame(
             N = length(na.omit(df[[var_name]])),
             Mean = mean(df[[var_name]], na.rm = TRUE),
             Median = median(df[[var_name]], na.rm = TRUE),
             SD = sd(df[[var_name]], na.rm = TRUE),
             Min = min(df[[var_name]], na.rm = TRUE),
-            # --- The FIX for "25%" is wrapping quantile() in as.numeric() ---
             Q1 = as.numeric(quantile(df[[var_name]], 0.25, na.rm = TRUE)),
             Q3 = as.numeric(quantile(df[[var_name]], 0.75, na.rm = TRUE)),
             Max = max(df[[var_name]], na.rm = TRUE),
-            row.names = "" # This explicitly removes row names
+            row.names = ""
           )
           print(summary_df)
         }
       }
     })
+    
+    # --- END: Definitive Corrected Summary/Distribution Table Logic ---
     
     # --- END: Final Corrected Summary/Distribution Table Logic ---
     
@@ -457,23 +461,58 @@ server <- function(input, output, session) {
     
     # --- End of Replacement Block ---
     
+    # --- START: Replacement for Box Plot Logic ---
+    
+    # --- START: Definitive Corrected Box Plot Logic ---
+    
     output$boxplot_plot <- renderPlot({
       req(df, input$descriptive_variable)
       var_name <- input$descriptive_variable
       group_var <- input$group_by_variable
-      if (is.numeric(df[[var_name]]) && length(unique(na.omit(df[[var_name]]))) >= 15) {
+      
+      # Check if a numeric variable is selected
+      if (is.numeric(df[[var_name]])) {
+        
+        # Check if a valid grouping variable is also selected
         if (group_var != "None" && group_var %in% names(df)) {
-          ggplot(df, aes(x = .data[[group_var]], y = .data[[var_name]], fill = .data[[group_var]])) +
+          # --- PLOT A: GROUPED, VERTICAL BOX PLOTS ---
+          # This is the correct plot for Screenshot #1
+          ggplot(df, aes(x = as.factor(.data[[group_var]]), y = .data[[var_name]], fill = as.factor(.data[[group_var]]))) +
             geom_boxplot() +
-            labs(title = paste("Boxplot of", var_name, "by", group_var), x = group_var, y = var_name) +
+            labs(
+              title = paste("Boxplot of", var_name, "by", group_var),
+              x = group_var,
+              y = var_name
+            ) +
             theme(legend.position = "none")
+          
         } else {
-          ggplot(df, aes(y = .data[[var_name]])) +
+          # --- PLOT B: SINGLE, HORIZONTAL BOX PLOT ---
+          # This is the correct plot for Screenshot #2
+          ggplot(df, aes(x = .data[[var_name]])) +
             geom_boxplot(fill = "lightgreen") +
-            labs(title = paste("Boxplot of", var_name), y = var_name)
+            labs(
+              title = paste("Boxplot of", var_name),
+              x = var_name,
+              y = NULL
+            ) +
+            theme(
+              axis.text.y = element_blank(),
+              axis.ticks.y = element_blank()
+            )
         }
+        # This else handles the case of a non-numeric variable where a boxplot is not appropriate.
+      } else {
+        # Return a blank plot with a message
+        ggplot() +
+          annotate("text", x = 0, y = 0, label = "Box plot requires a numeric variable.", size = 5) +
+          theme_void()
       }
     })
+    
+    # --- END: Definitive Corrected Box Plot Logic ---
+    
+    # --- END: Replacement for Box Plot Logic ---
     
     output$density_plot <- renderPlot({
       req(df, input$descriptive_variable)
