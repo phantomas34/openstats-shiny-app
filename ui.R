@@ -206,29 +206,41 @@ ui <- page_sidebar(
   conditionalPanel("input.main_nav == 'Probability'",
                    h2("Probability Distributions and Calculations"),
                    navset_card_tab(
+                     # --- START: Refactored Basic Event Probability Panel ---
+                     
                      nav_panel("Basic Event Probability",
                                layout_columns(
-                                 col_widths = c(6, 6),
+                                 col_widths = c(4, 8),
+                                 
+                                 # --- Input Card: Focused on calculation type ---
                                  card(
-                                   card_header("Input Probabilities"),
-                                   numericInput("prob_A", "P(A)", value = 0.5, min = 0, max = 1, step = 0.01),
-                                   numericInput("prob_B", "P(B)", value = 0.5, min = 0, max = 1, step = 0.01),
-                                   numericInput("prob_A_and_B", "P(A and B) (Intersection)", value = 0.25, min = 0, max = 1, step = 0.01),
-                                   actionButton("calculate_probabilities", "Calculate Basic Probabilities")
+                                   card_header("Select Rule and Input Parameters"),
+                                   
+                                   selectInput("prob_calc_type", "Select Calculation Type:",
+                                               choices = c(
+                                                 "P(A or B) - Additive Rule" = "union",
+                                                 "P(A|B) - Conditional Probability" = "conditional",
+                                                 "Check for Independence / Mutually Exclusive" = "check_relationship"
+                                               )),
+                                   
+                                   hr(),
+                                   
+                                   # Dynamic inputs controlled by the selection
+                                   uiOutput("prob_required_inputs"),
+                                   
+                                   actionButton("calculate_basic_probs", "Calculate")
                                  ),
+                                 
+                                 # --- Results Card ---
                                  card(
-                                   card_header("Calculated Results"),
-                                   h4("Calculated Probabilities:"),
-                                   verbatimTextOutput("calculated_probs"),
-                                   hr(),
-                                   h4("Conditional Probabilities:"),
-                                   verbatimTextOutput("conditional_probs"),
-                                   hr(),
-                                   h4("Event Relationships:"),
-                                   verbatimTextOutput("event_relationships")
+                                   card_header("Result and Interpretation"),
+                                   verbatimTextOutput("calculated_output_title"),
+                                   verbatimTextOutput("calculated_output")
                                  )
                                )
                      ),
+                     
+                     # --- END: Refactored Basic Event Probability Panel ---
                      nav_panel("Normal Distribution",
                                layout_columns(
                                  col_widths = c(4, 8), # Split the page 1/3 and 2/3

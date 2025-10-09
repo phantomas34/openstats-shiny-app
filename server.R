@@ -1282,66 +1282,88 @@ server <- function(input, output, session) {
   
   # --- END: New Logistic Regression Logic ---
   
-  # --- PROBABILITY LOGIC ---
+  # --- START: Definitive Replacement for Basic Probability Logic ---
   
-  observeEvent(input$calculate_probabilities, {
-    P_A <- input$prob_A
-    P_B <- input$prob_B
-    P_A_and_B <- input$prob_A_and_B
-    if (P_A < 0 || P_A > 1 || P_B < 0 || P_B > 1 || P_A_and_B < 0 || P_A_and_B > 1) {
-      showNotification("Probabilities must be between 0 and 1.", type = "error")
-      output$calculated_probs <- renderPrint({ cat("Invalid input. Probabilities must be between 0 and 1.\n") })
-      output$conditional_probs <- renderPrint({ cat("Invalid input.\n") })
-      output$event_relationships <- renderPrint({ cat("Invalid input.\n") })
-      return()
-    }
-    if (P_A_and_B > P_A || P_A_and_B > P_B) {
-      showNotification("P(A and B) cannot be greater than P(A) or P(B).", type = "error")
-      output$calculated_probs <- renderPrint({ cat("Invalid input: P(A and B) cannot be greater than P(A) or P(B).\n") })
-      output$conditional_probs <- renderPrint({ cat("Invalid input.\n") })
-      output$event_relationships <- renderPrint({ cat("Invalid input.\n") })
-      return()
-    }
-    P_A_or_B <- P_A + P_B - P_A_and_B
-    P_A_complement <- 1 - P_A
-    P_B_complement <- 1 - P_B
-    output$calculated_probs <- renderPrint({
-      cat(paste0("P(A) = ", round(P_A, 4), "\n"))
-      cat(paste0("P(B) = ", round(P_B, 4), "\n"))
-      cat(paste0("P(A and B) = ", round(P_A_and_B, 4), "\n"))
-      cat(paste0("P(A or B) = ", round(P_A_or_B, 4), "\n"))
-      cat(paste0("P(A') = ", round(P_A_complement, 4), "\n"))
-      cat(paste0("P(B') = ", round(P_B_complement, 4), "\n"))
-    })
-    P_A_given_B <- ifelse(P_B > 0, P_A_and_B / P_B, NA)
-    P_B_given_A <- ifelse(P_A > 0, P_A_and_B / P_A, NA)
-    output$conditional_probs <- renderPrint({
-      if (is.na(P_A_given_B)) {
-        cat("P(A | B): Cannot be calculated (P(B) is 0).\n")
-      } else {
-        cat(paste0("P(A | B) = ", round(P_A_given_B, 4), "\n"))
+  observeEvent(input$calculate_basic_probs, {
+    calc_type <- input$prob_calc_type
+    
+    # Clear previous outputs
+    output$calculated_output_title <- renderPrint({ "" })
+    output$calculated_output <- renderPrint({ "" })
+    
+    tryCatch({ # --- Wrap all logic in a tryCatch block ---
+      
+      if (calc_type == "union") {
+        req(input$prob_A_union, input$prob_B_union, input$prob_A_and_B_union)
+        P_A <- input$prob_A_union
+        P_B <- input$prob_B_union
+        P_A_and_B <- input$prob_A_and_B_union
+        
+        P_A_or_B <- P_A + P_B - P_A_and_B
+        
+        output$calculated_output_title <- renderPrint({ cat("P(A or B) - Additive Rule") })
+        output$calculated_output <- renderPrint({
+          cat(paste0("Formula: P(A) + P(B) - P(A and B)\n"))
+          cat(paste0("Result: ", round(P_A_or_B, 4), "\n"))
+        })
+        
+      } else if (calc_type == "conditional") {
+        req(input$prob_A_cond, input$prob_B_cond)
+        P_A_and_B <- input$prob_A_cond
+        P_B <- input$prob_B_cond # The Condition
+        
+        # --- THE FIX: Explicitly check for P(B) <= 0 ---
+        if (P_B <= 0) {
+          stop("P(B) (the given condition) cannot be zero or less.")
+        }
+        
+        P_A_given_B <- P_A_and_B / P_B
+        
+        output$calculated_output_title <- renderPrint({ cat("P(A | B) - Conditional Probability Rule") })
+        output$calculated_output <- renderPrint({
+          cat(paste0("Formula: P(A and B) / P(B)\n"))
+          cat(paste0("Result: ", round(P_A_given_B, 4), "\n"))
+        })
+        
+      } else if (calc_type == "check_relationship") {
+        req(input$prob_A_rel, input$prob_B_rel, input$prob_A_and_B_rel)
+        P_A <- input$prob_A_rel
+        P_B <- input$prob_B_rel
+        P_A_and_B <- input$prob_A_and_B_rel
+        
+        is_independent <- abs(P_A_and_B - (P_A * P_B)) < 1e-9
+        is_mutually_exclusive <- P_A_and_B == 0
+        
+        output$calculated_output_title <- renderPrint({ cat("Event Relationship Check") })
+        output$calculated_output <- renderPrint({
+          cat(paste0("Check 1 (Independence): Is P(A and B) equal to P(A) * P(B)?\n"))
+          cat(paste0("  - P(A) * P(B) = ", round(P_A * P_B, 4), "\n"))
+          cat(paste0("  - P(A and B) = ", round(P_A_and_B, 4), "\n\n"))
+          
+          if (is_independent) {
+            cat("Result: Events A and B are Independent.\n\n")
+          } else {
+            cat("Result: Events A and B are Dependent.\n\n")
+          }
+          
+          cat("Check 2 (Mutually Exclusive): Is P(A and B) equal to 0?\n")
+          if (is_mutually_exclusive) {
+            cat("Result: Events A and B are Mutually Exclusive.\n")
+          } else {
+            cat("Result: Events A and B are Not Mutually Exclusive.\n")
+          }
+        })
       }
-      if (is.na(P_B_given_A)) {
-        cat("P(B | A): Cannot be calculated (P(A) is 0).\n")
-      } else {
-        cat(paste0("P(B | A) = ", round(P_B_given_A, 4), "\n"))
-      }
-    })
-    is_independent <- abs(P_A_and_B - (P_A * P_B)) < 1e-9
-    is_mutually_exclusive <- P_A_and_B == 0
-    output$event_relationships <- renderPrint({
-      if (is_independent) {
-        cat("Events A and B are Independent.\n")
-      } else {
-        cat("Events A and B are Dependent.\n")
-      }
-      if (is_mutually_exclusive) {
-        cat("Events A and B are Mutually Exclusive.\n")
-      } else {
-        cat("Events A and B are Not Mutually Exclusive.\n")
-      }
+      
+    }, error = function(e) { # --- This 'catch' block runs IF an error occurs ---
+      output$calculated_output_title <- renderPrint({ cat("Error in Calculation") })
+      output$calculated_output <- renderPrint({
+        cat(paste("An error occurred:", e$message))
+      })
     })
   })
+  
+  # --- END: Definitive Replacement for Basic Probability Logic ---
   
   output$normal_inputs <- renderUI({
     req(input$normal_prob_type)
@@ -1358,6 +1380,33 @@ server <- function(input, output, session) {
       )
     }
   })
+  
+  # --- START: New Logic for Dynamic Probability Inputs ---
+  
+  output$prob_required_inputs <- renderUI({
+    calc_type <- input$prob_calc_type
+    
+    if (calc_type == "union") {
+      tagList(
+        numericInput("prob_A_union", "P(A):", value = 0.5, min = 0, max = 1, step = 0.01),
+        numericInput("prob_B_union", "P(B):", value = 0.5, min = 0, max = 1, step = 0.01),
+        numericInput("prob_A_and_B_union", "P(A and B) (Intersection):", value = 0.25, min = 0, max = 1, step = 0.01)
+      )
+    } else if (calc_type == "conditional") {
+      tagList(
+        numericInput("prob_A_cond", "P(A and B) (Intersection):", value = 0.25, min = 0, max = 1, step = 0.01),
+        numericInput("prob_B_cond", "P(B) (The given condition):", value = 0.5, min = 0, max = 1, step = 0.01)
+      )
+    } else if (calc_type == "check_relationship") {
+      tagList(
+        numericInput("prob_A_rel", "P(A):", value = 0.5, min = 0, max = 1, step = 0.01),
+        numericInput("prob_B_rel", "P(B):", value = 0.5, min = 0, max = 1, step = 0.01),
+        numericInput("prob_A_and_B_rel", "P(A and B) (Intersection):", value = 0.25, min = 0, max = 1, step = 0.01)
+      )
+    }
+  })
+  
+  # --- END: New Logic for Dynamic Probability Inputs ---
   
   observeEvent(input$calc_normal, {
     req(input$normal_mean, input$normal_sd, input$normal_prob_type)
@@ -1617,4 +1666,5 @@ server <- function(input, output, session) {
   })
   
   # --- END: New Logic for Non-Parametric Analyses ---
+  
 }
