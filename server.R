@@ -340,17 +340,39 @@ server <- function(input, output, session) {
   observeEvent(input$analyze_descriptive, {
     df <- data_r()
     
+    # --- START: Final Corrected Summary/Distribution Table Logic ---
+    
     output$summary_stats_output <- renderPrint({
       req(df, input$descriptive_variable)
       var_name <- input$descriptive_variable
-      group_var <- input$group_by_variable
       
       if (!(var_name %in% names(df))) {
         cat("Please select a valid variable for descriptive statistics.\n")
         return()
       }
       
-      if (is.numeric(df[[var_name]])) {
+      # --- The DEFINITIVE FIX is in this condition ---
+      # We check if the variable is considered "categorical-like" by our smart logic.
+      is_categorical_like <- is.character(df[[var_name]]) || is.factor(df[[var_name]]) || 
+        (is.numeric(df[[var_name]]) && length(unique(na.omit(df[[var_name]]))) < 15)
+      
+      if (is_categorical_like) {
+        # --- Logic for CATEGORICAL variables (will now correctly run for 'cyl') ---
+        cat("Frequency Distribution Table:\n\n")
+        
+        summary_table <- df %>%
+          filter(!is.na(.data[[var_name]])) %>%
+          count(.data[[var_name]], name = "Frequency") %>%
+          mutate(Relative_Frequency = scales::percent(Frequency / sum(Frequency), accuracy = 0.1))
+        
+        print(summary_table)
+        
+      } else {
+        # --- Logic for truly NUMERIC variables (like 'mpg') ---
+        cat("Descriptive Statistics:\n\n")
+        
+        # We now use group_by logic only if a group is selected.
+        group_var <- input$group_by_variable
         if (group_var != "None" && group_var %in% names(df)) {
           grouped_summary <- df %>%
             group_by(.data[[group_var]]) %>%
@@ -360,48 +382,34 @@ server <- function(input, output, session) {
               Median = median(.data[[var_name]], na.rm = TRUE),
               SD = sd(.data[[var_name]], na.rm = TRUE),
               Min = min(.data[[var_name]], na.rm = TRUE),
-              Q1 = quantile(.data[[var_name]], 0.25, na.rm = TRUE),
-              Q3 = quantile(.data[[var_name]], 0.75, na.rm = TRUE),
+              Q1 = as.numeric(quantile(.data[[var_name]], 0.25, na.rm = TRUE)),
+              Q3 = as.numeric(quantile(.data[[var_name]], 0.75, na.rm = TRUE)),
               Max = max(.data[[var_name]], na.rm = TRUE),
               .groups = "drop"
             )
           print(grouped_summary)
         } else {
+          # This part creates the summary for a single numeric variable
           summary_df <- data.frame(
             N = length(na.omit(df[[var_name]])),
             Mean = mean(df[[var_name]], na.rm = TRUE),
             Median = median(df[[var_name]], na.rm = TRUE),
             SD = sd(df[[var_name]], na.rm = TRUE),
             Min = min(df[[var_name]], na.rm = TRUE),
-            Q1 = quantile(df[[var_name]], 0.25, na.rm = TRUE),
-            Q3 = quantile(df[[var_name]], 0.75, na.rm = TRUE),
-            Max = max(df[[var_name]], na.rm = TRUE)
+            # --- The FIX for "25%" is wrapping quantile() in as.numeric() ---
+            Q1 = as.numeric(quantile(df[[var_name]], 0.25, na.rm = TRUE)),
+            Q3 = as.numeric(quantile(df[[var_name]], 0.75, na.rm = TRUE)),
+            Max = max(df[[var_name]], na.rm = TRUE),
+            row.names = "" # This explicitly removes row names
           )
           print(summary_df)
         }
-      } else {
-        if (group_var != "None" && group_var %in% names(df)) {
-          grouped_counts <- df %>%
-            filter(!is.na(.data[[var_name]]), !is.na(.data[[group_var]])) %>%
-            mutate(across(all_of(c(var_name, group_var)), as.character)) %>%
-            group_by(.data[[group_var]], .data[[var_name]]) %>%
-            summarise(Count = n(), .groups = "drop_last") %>%
-            mutate(Percentage = round(100 * Count / sum(Count), 2)) %>%
-            ungroup()
-          print(grouped_counts)
-        } else {
-          counts <- table(df[[var_name]])
-          percentages <- round(100 * prop.table(counts), 2)
-          summary_table <- data.frame(
-            Category = names(counts),
-            Count = as.numeric(counts),
-            Percentage = paste0(percentages, "%"),
-            stringsAsFactors = FALSE
-          )
-          print(summary_table)
-        }
       }
     })
+    
+    # --- END: Final Corrected Summary/Distribution Table Logic ---
+    
+    # --- Replacement for Histogram Plot ---
     
     output$histogram_plot <- renderPlot({
       req(df, input$descriptive_variable)
@@ -409,32 +417,51 @@ server <- function(input, output, session) {
       group_var <- input$group_by_variable
       validate(need(is.numeric(df[[var]]), "Histogram requires a numeric variable."))
       
-      gg <- ggplot(df, aes(x = .data[[var]]))
+      # Determine the y-axis mapping based on user input from the new dropdown
+      y_axis_aes <- if (input$hist_yaxis_type == "density") aes(y = ..density..) else aes(y = ..count..)
+      y_axis_label <- if (input$hist_yaxis_type == "density") "Relative Frequency (Density)" else "Count (Frequency)"
       
+      # Build the plot
+      gg <- ggplot(df, aes(x = .data[[var]])) +
+        geom_histogram(y_axis_aes, # Apply the dynamic y-axis mapping here
+                       fill = "steelblue", 
+                       bins = ifelse(!is.null(input$hist_bins), input$hist_bins, 30))
+      
+      # Add faceting for grouping (if selected)
       if (group_var != "None" && group_var %in% names(df)) {
-        gg <- gg +
-          geom_histogram(fill = "steelblue", bins = ifelse(!is.null(input$hist_bins), input$hist_bins, 20)) +
-          facet_wrap(vars(.data[[group_var]]), scales = "free_y")
-      } else {
-        gg <- gg +
-          geom_histogram(fill = "steelblue", bins = ifelse(!is.null(input$hist_bins), input$hist_bins, 20))
+        gg <- gg + facet_wrap(vars(.data[[group_var]]), scales = "free_y")
       }
       
-      gg <- gg + labs(title = paste("Histogram of", var), x = var, y = "Count")
+      # Add labels and optional mean/median lines
+      gg <- gg + labs(title = paste("Histogram of", var), x = var, y = y_axis_label)
       
-      if (!is.null(input$show_mean_median) && input$show_mean_median) {
-        gg <- gg +
-          geom_vline(aes(xintercept = mean(df[[var]], na.rm = TRUE)), color = "red", linetype = "dashed") +
-          geom_vline(aes(xintercept = median(df[[var]], na.rm = TRUE)), color = "green", linetype = "dashed")
+      if (isTRUE(input$show_mean_median)) {
+        # This logic needs to be safe for grouped data
+        if (group_var != "None" && group_var %in% names(df)) {
+          summary_lines <- df %>% 
+            group_by(.data[[group_var]]) %>%
+            summarise(mean_val = mean(.data[[var]], na.rm = TRUE),
+                      median_val = median(.data[[var]], na.rm = TRUE))
+          gg <- gg + 
+            geom_vline(data = summary_lines, aes(xintercept = mean_val), color = "red", linetype = "dashed") +
+            geom_vline(data = summary_lines, aes(xintercept = median_val), color = "green", linetype = "dashed")
+        } else {
+          gg <- gg +
+            geom_vline(aes(xintercept = mean(df[[var]], na.rm = TRUE)), color = "red", linetype = "dashed") +
+            geom_vline(aes(xintercept = median(df[[var]], na.rm = TRUE)), color = "green", linetype = "dashed")
+        }
       }
+      
       gg
     })
+    
+    # --- End of Replacement Block ---
     
     output$boxplot_plot <- renderPlot({
       req(df, input$descriptive_variable)
       var_name <- input$descriptive_variable
       group_var <- input$group_by_variable
-      if (is.numeric(df[[var_name]])) {
+      if (is.numeric(df[[var_name]]) && length(unique(na.omit(df[[var_name]]))) >= 15) {
         if (group_var != "None" && group_var %in% names(df)) {
           ggplot(df, aes(x = .data[[group_var]], y = .data[[var_name]], fill = .data[[group_var]])) +
             geom_boxplot() +
