@@ -681,7 +681,44 @@ server <- function(input, output, session) {
     
     current_dot_plot(p_final) 
   })
+  # --- START: Corrected Bar Chart Logic ---
   
+  output$barchart_plot <- renderPlot({
+    # --- THE FIX IS ON THIS LINE ---
+    df <- data_r() # Get the data from our reactive value first!
+    
+    req(df, input$descriptive_variable)
+    var_name <- input$descriptive_variable
+    
+    is_categorical_like <- is.character(df[[var_name]]) || is.factor(df[[var_name]]) || 
+      (is.numeric(df[[var_name]]) && length(unique(na.omit(df[[var_name]]))) < 15)
+    
+    validate(need(is_categorical_like, "Bar chart is for categorical or discrete numeric variables."))
+    
+    df_summary <- df %>%
+      filter(!is.na(.data[[var_name]])) %>%
+      count(.data[[var_name]], name = "Frequency") %>%
+      mutate(Proportion = Frequency / sum(Frequency))
+    
+    y_axis_var <- if (input$barchart_yaxis_type == "proportion") "Proportion" else "Frequency"
+    y_axis_label <- if (input$barchart_yaxis_type == "proportion") "Relative Frequency" else "Count"
+    
+    gg <- ggplot(df_summary, aes(x = as.factor(.data[[var_name]]), y = .data[[y_axis_var]])) +
+      geom_col(fill = "cornflowerblue") +
+      labs(
+        title = paste("Bar Chart of", var_name),
+        x = var_name,
+        y = y_axis_label
+      )
+    
+    if (input$barchart_yaxis_type == "proportion") {
+      gg <- gg + scale_y_continuous(labels = scales::percent)
+    }
+    
+    gg
+  })
+  
+  # --- END: Corrected Bar Chart Logic ---
   
   output$dot_plot <- renderPlot({
     req(current_dot_plot())

@@ -46,63 +46,93 @@ ui <- page_sidebar(
                    )
   ),
   
+  # --- START: Definitive Corrected Descriptive Statistics Panel ---
+  
   conditionalPanel("input.main_nav == 'Descriptive Statistics'",
-                   h2("Descriptive Statistics"),
-                   layout_columns(
-                     col_widths = c(4, 8),
-                     card(
-                       card_header("Variable Selection"),
-                       uiOutput("select_descriptive_variable"),
-                       uiOutput("select_group_by_variable"),
-                       actionButton("analyze_descriptive", "Analyze")
+                   # Use tagList to group all elements within the conditionalPanel
+                   tagList(
+                     h2("Descriptive Statistics"),
+                     
+                     # Layout 1: Variable Selection & Summary
+                     layout_columns(
+                       col_widths = c(4, 8),
+                       card(
+                         card_header("Variable Selection"),
+                         uiOutput("select_descriptive_variable"),
+                         uiOutput("select_group_by_variable"),
+                         actionButton("analyze_descriptive", "Analyze")
+                       ),
+                       card(
+                         card_header("Summary Statistics"),
+                         verbatimTextOutput("summary_stats_output")
+                       )
                      ),
-                     card(
-                       card_header("Summary Statistics"),
-                       verbatimTextOutput("summary_stats_output")
-                     )
-                   ),
-                   layout_columns(
-                     col_widths = c(6, 6),
-                     card(
-                       card_header("Histogram"),
-                       checkboxInput("show_mean_median", "Plot Mean and Median", value = TRUE),
-                       numericInput("hist_bins", "Number of Bins", value = 30, min = 5, max = 100),
-                       plotOutput("histogram_plot")
+                     
+                     # Layout 2: Histogram & Box Plot
+                     layout_columns(
+                       col_widths = c(6, 6),
+                       card(
+                         card_header("Histogram"),
+                         checkboxInput("show_mean_median", "Plot Mean and Median", value = TRUE),
+                         numericInput("hist_bins", "Number of Bins", value = 30, min = 5, max = 100),
+                         selectInput("hist_yaxis_type", "Y-Axis Represents:",
+                                     choices = c("Count (Frequency)" = "count",
+                                                 "Proportion (Relative Frequency)" = "density")),
+                         plotOutput("histogram_plot")
+                       ),
+                       card(
+                         card_header("Box Plot"),
+                         plotOutput("boxplot_plot")
+                       )
                      ),
-                     card(
-                       card_header("Box Plot"),
-                       plotOutput("boxplot_plot")
-                     )
-                   ),
-                   layout_columns(
-                     col_widths = c(6, 6),
-                     card(
-                       card_header("Density Plot"),
-                       plotOutput("density_plot")
+                     
+                     # Layout 3: Density Plot & Pie Chart
+                     layout_columns(
+                       col_widths = c(6, 6),
+                       card(
+                         card_header("Density Plot"),
+                         plotOutput("density_plot")
+                       ),
+                       card(
+                         card_header("Pie Chart"),
+                         plotOutput("pie_chart_plot")
+                       )
                      ),
-                     card(
-                       card_header("Pie Chart (for Categorical Data)"),
-                       plotOutput("pie_chart_plot")
-                     )
-                   ),
-                   layout_columns(
-                     col_widths = c(6, 6),
-                     card(
-                       card_header("Scatter Plot"),
-                       uiOutput("select_scatter_x"),
-                       uiOutput("select_scatter_y"),
-                       actionButton("generate_scatter", "Generate Scatter Plot"),
-                       plotOutput("scatter_plot")
+                     
+                     # Layout 4: The new Bar Chart
+                     layout_columns(
+                       col_widths = 12,
+                       card(
+                         card_header("Bar Chart (for Categorical Data)"),
+                         selectInput("barchart_yaxis_type", "Y-Axis Represents:",
+                                     choices = c("Count (Frequency)" = "count",
+                                                 "Proportion (Relative Frequency)" = "proportion")),
+                         plotOutput("barchart_plot")
+                       )
                      ),
-                     card(
-                       card_header("Dot Plot"),
-                       uiOutput("select_dot_plot_variable"),
-                       actionButton("generate_dot_plot", "Generate Dot Plot"),
-                       downloadButton("download_dot_plot", "Download Plot"),
-                       plotOutput("dot_plot")
+                     
+                     # Layout 5: Scatter Plot & Dot Plot
+                     layout_columns(
+                       col_widths = c(6, 6),
+                       card(
+                         card_header("Scatter Plot"),
+                         uiOutput("select_scatter_x"),
+                         uiOutput("select_scatter_y"),
+                         actionButton("generate_scatter", "Generate Scatter Plot"),
+                         plotOutput("scatter_plot")
+                       ),
+                       card(
+                         card_header("Dot Plot"),
+                         uiOutput("select_dot_plot_variable"),
+                         actionButton("generate_dot_plot", "Generate Dot Plot"),
+                         downloadButton("download_dot_plot", "Download Plot"),
+                         plotOutput("dot_plot")
+                       )
                      )
-                   )
+                   ) # End of tagList
   ),
+  
+  # --- END: Definitive Corrected Descriptive Statistics Panel ---,
   
   conditionalPanel("input.main_nav == 'Inferential Statistics'",
                    h2("Inferential Statistics"),
