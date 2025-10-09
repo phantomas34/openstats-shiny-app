@@ -1014,35 +1014,48 @@ server <- function(input, output, session) {
     })
   })
   
+  # --- START: Replacement for the Chi-Squared observeEvent ---
+  
+  # This observeEvent now only *triggers* the outputs to render. All the heavy lifting
+  # for table creation is done in the eventReactive we created in Step 1.
   observeEvent(input$run_chi_sq, {
-    df <- data_r()
-    req(df, input$chi_x, input$chi_y)
-    x_var <- input$chi_x
-    y_var <- input$chi_y
     
-    if (!is.character(df[[x_var]]) && !is.factor(df[[x_var]])) {
-      showNotification("Row variable for Chi-Squared must be categorical.", type = "warning")
-      return(NULL)
-    }
-    if (!is.character(df[[y_var]]) && !is.factor(df[[y_var]])) {
-      showNotification("Column variable for Chi-Squared must be categorical.", type = "warning")
-      return(NULL)
-    }
-    
-    output$chi_sq_output <- renderPrint({
-      df_filtered <- df %>%
-        filter(!is.na(.data[[x_var]]) & !is.na(.data[[y_var]]))
+    # --- Output 1: The Two-Way Table ---
+    output$chi_sq_table_output <- renderPrint({
+      # Get the table from our smart reactive engine
+      contingency_table <- contingency_table_r()
+      req(contingency_table) # Stop if the table failed to build
       
-      if (nrow(df_filtered) == 0) {
-        cat("No valid data pairs found for the selected variables.\n")
-        return()
+      table_type <- input$chisq_table_type
+      
+      if (table_type == "counts") {
+        cat("Two-Way Table (Observed Counts):\n\n")
+        # Use addmargins to show row/column totals for clarity
+        print(addmargins(contingency_table))
+        
+      } else {
+        # Use prop.table for percentages
+        prop_table <- switch(table_type,
+                             "row_perc" = prop.table(contingency_table, margin = 1),
+                             "col_perc" = prop.table(contingency_table, margin = 2),
+                             "total_perc" = prop.table(contingency_table))
+        
+        title <- switch(table_type,
+                        "row_perc" = "Two-Way Table (Row Percentages):\n\n",
+                        "col_perc" = "Two-Way Table (Column Percentages):\n\n",
+                        "total_perc" = "Two-Way Table (Total Percentages):\n\n")
+        
+        cat(title)
+        # Multiply by 100 and print rounded percentages
+        print(round(prop_table * 100, 1))
       }
-      
-      contingency_table <- table(df_filtered[[x_var]], df_filtered[[y_var]])
-      
-      cat("Contingency Table (Observed Counts):\n")
-      print(contingency_table)
-      cat("\n----------------------------------------\n")
+    })
+    
+    # --- Output 2: The Chi-Squared Test Results ---
+    output$chi_sq_test_output <- renderPrint({
+      # Get the same table from our smart reactive engine
+      contingency_table <- contingency_table_r()
+      req(contingency_table)
       
       if (nrow(contingency_table) < 2 || ncol(contingency_table) < 2) {
         cat("The contingency table must have at least 2 rows and 2 columns to perform the test.\n")
@@ -1063,7 +1076,9 @@ server <- function(input, output, session) {
         
         cat("Chi-Squared Test Result:\n\n")
         print(test_result)
-        cat("\nExpected Counts:\n")
+        
+        cat("\n----------------------------------------\n")
+        cat("Expected Counts:\n\n")
         print(round(test_result$expected, 2))
         
         if (any(test_result$expected < 5)) {
@@ -1074,6 +1089,53 @@ server <- function(input, output, session) {
       }
     })
   })
+  
+  # --- END: Replacement for the Chi-Squared observeEvent ---
+  
+  # --- START: Definitive Corrected Reactive for Smart Table Creation ---
+  
+  contingency_table_r <- eventReactive(input$run_chi_sq, {
+    df <- data_r()
+    req(df, input$chi_x, input$chi_y)
+    x_var <- input$chi_x
+    y_var <- input$chi_y
+    
+    # --- THE DEFINITIVE FIX is in this validation section ---
+    
+    # Define our "is_categorical_like" helper logic right here
+    is_cat <- function(var) {
+      is.character(var) || is.factor(var) || (is.numeric(var) && length(unique(na.omit(var))) < 15)
+    }
+    
+    # Use the smart validation check
+    if (!is_cat(df[[x_var]])) {
+      showNotification("Row variable must be categorical or discrete numeric (fewer than 15 unique values).", type = "warning", duration = 8)
+      return(NULL)
+    }
+    if (!is_cat(df[[y_var]])) {
+      showNotification("Column variable must be categorical or discrete numeric (fewer than 15 unique values).", type = "warning", duration = 8)
+      return(NULL)
+    }
+    
+    # --- The rest of the logic is the same ---
+    
+    df_filtered <- df %>%
+      filter(!is.na(.data[[x_var]]) & !is.na(.data[[y_var]]))
+    
+    if (nrow(df_filtered) == 0) {
+      showNotification("No valid data pairs found.", type = "error"); return(NULL)
+    }
+    
+    if ("Freq" %in% names(df_filtered) && is.numeric(df_filtered$Freq)) {
+      formula_str <- paste("Freq ~", x_var, "+", y_var)
+      xtabs(as.formula(formula_str), data = df_filtered)
+    } else {
+      # Coerce to factor here to ensure table() works on numeric-as-category
+      table(as.factor(df_filtered[[x_var]]), as.factor(df_filtered[[y_var]]))
+    }
+  })
+  
+  # --- END: Definitive Corrected Reactive ---
   
   observeEvent(input$check_normality, {
     df <- data_r()

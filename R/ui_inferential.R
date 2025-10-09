@@ -65,7 +65,27 @@ inferential_tab_ui <- accordion(
     uiOutput("select_chi_y"),
     checkboxInput("use_fisher_exact", "Use Fisher's Exact Test (for small samples)", value = FALSE),
     actionButton("run_chi_sq", "Run Chi-Squared Test"),
-    verbatimTextOutput("chi_sq_output")
+    # --- START: New Tabbed Output for Chi-Squared ---
+    
+    navset_card_tab(
+      id = "chisq_output_tabs",
+      nav_panel(
+        "Two-Way Table", 
+        # Add a dropdown to select table type (counts or percentages)
+        selectInput("chisq_table_type", "Display:",
+                    choices = c("Observed Counts" = "counts",
+                                "Row Percentages" = "row_perc",
+                                "Column Percentages" = "col_perc",
+                                "Total Percentages" = "total_perc")),
+        verbatimTextOutput("chi_sq_table_output")
+      ),
+      nav_panel(
+        "Chi-Squared Test", 
+        verbatimTextOutput("chi_sq_test_output")
+      )
+    )
+    
+    # --- END: New Tabbed Output for Chi-Squared ---
   ),
   
   # Panel 3: Normality Check
