@@ -251,6 +251,10 @@ ui <- page_sidebar(
                                    numericInput("normal_mean", "Mean (\u03bc):", value = 0),
                                    numericInput("normal_sd", "Standard Deviation (\u03c3):", value = 1, min = 0.01),
                                    
+                                   # --- START: New UI Element for Empirical Rule ---
+                                   checkboxInput("show_empirical_rule", "Show Empirical Rule (68-95-99.7)", value = FALSE),
+                                   # --- END: New UI Element ---
+                                   
                                    hr(), # --- Separator ---
                                    
                                    # Single dropdown to control the entire panel

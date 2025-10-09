@@ -1408,6 +1408,9 @@ server <- function(input, output, session) {
   
   # --- END: New Logic for Dynamic Probability Inputs ---
   
+  # --- START: Definitive Corrected Normal Distribution Logic ---
+  
+  # Block 1: The Calculation (runs ONLY on button press)
   observeEvent(input$calc_normal, {
     req(input$normal_mean, input$normal_sd, input$normal_prob_type)
     
@@ -1445,19 +1448,53 @@ server <- function(input, output, session) {
     )
     
     output$normal_result <- renderPrint({ result_text })
+  })
+  
+  # --- START: Definitive Corrected Normal Plot Logic ---
+  
+  output$normal_plot <- renderPlot({
+    # This plot only requires mean and sd to draw the basic curve.
+    req(input$normal_mean, input$normal_sd)
     
-    output$normal_plot <- renderPlot({
-      mean_val <- input$normal_mean
-      sd_val <- input$normal_sd
-      x_vals <- seq(mean_val - 4 * sd_val, mean_val + 4 * sd_val, length.out = 500)
-      df <- data.frame(x = x_vals, y = dnorm(x_vals, mean = mean_val, sd = sd_val))
+    mean_val <- input$normal_mean
+    sd_val <- input$normal_sd
+    x_vals <- seq(mean_val - 4 * sd_val, mean_val + 4 * sd_val, length.out = 500)
+    df <- data.frame(x = x_vals, y = dnorm(x_vals, mean = mean_val, sd = sd_val))
+    
+    gg <- ggplot(df, aes(x, y)) +
+      geom_line(color = "steelblue", linewidth = 1) +
+      labs(
+        title = paste("Normal Distribution (\u03bc =", mean_val, ", \u03c3 =", sd_val, ")"),
+        x = "X", y = "Density"
+      )
+    
+    # --- THE DEFINITIVE FIX is this restructured if/else block ---
+    # It prioritizes the checkbox and has its own internal validation (req).
+    if (isTRUE(input$show_empirical_rule)) {
+      # Define the SD boundaries
+      one_sd_lower <- mean_val - sd_val
+      one_sd_upper <- mean_val + sd_val
+      two_sd_lower <- mean_val - 2 * sd_val
+      two_sd_upper <- mean_val + 2 * sd_val
+      three_sd_lower <- mean_val - 3 * sd_val
+      three_sd_upper <- mean_val + 3 * sd_val
       
-      gg <- ggplot(df, aes(x, y)) +
-        geom_line(color = "steelblue", linewidth = 1) +
-        labs(
-          title = paste("Normal Distribution (\u03bc =", mean_val, ", \u03c3 =", sd_val, ")"),
-          x = "X", y = "Density"
-        )
+      # Add shaded areas for each region
+      gg <- gg +
+        geom_area(data = subset(df, x >= three_sd_lower & x <= three_sd_upper), aes(y = y), fill = "lightblue", alpha = 0.5) +
+        geom_area(data = subset(df, x >= two_sd_lower & x <= two_sd_upper), aes(y = y), fill = "cornflowerblue", alpha = 0.5) +
+        geom_area(data = subset(df, x >= one_sd_lower & x <= one_sd_upper), aes(y = y), fill = "royalblue", alpha = 0.5) +
+        
+        # Add text annotations
+        annotate("text", x = mean_val, y = dnorm(mean_val, mean_val, sd_val) * 0.5, label = "68%", color = "white", size = 5) +
+        annotate("text", x = mean_val - 1.5 * sd_val, y = dnorm(mean_val - 1.5 * sd_val, mean_val, sd_val) * 0.2, label = "95%", size = 5) +
+        annotate("text", x = mean_val + 1.5 * sd_val, y = dnorm(mean_val + 1.5 * sd_val, mean_val, sd_val) * 0.2, label = "95%", size = 5) +
+        annotate("text", x = mean_val - 2.5 * sd_val, y = dnorm(mean_val - 2.5 * sd_val, mean_val, sd_val) * 0.2, label = "99.7%", size = 5) +
+        annotate("text", x = mean_val + 2.5 * sd_val, y = dnorm(mean_val + 2.5 * sd_val, mean_val, sd_val) * 0.2, label = "99.7%", size = 5)
+      
+    } else {
+      # Original logic for shading, now with its OWN validation inside the else block
+      prob_type <- input$normal_prob_type
       
       if (prob_type == "less") {
         req(input$normal_x)
@@ -1474,10 +1511,14 @@ server <- function(input, output, session) {
         gg <- gg + geom_vline(xintercept = x_val, color = "red", linetype = "dashed", linewidth = 1) +
           geom_area(data = subset(df, x <= x_val), aes(y = y), fill = "lightblue", alpha = 0.5)
       }
-      
-      gg
-    })
+    }
+    
+    gg
   })
+  
+  # --- END: Definitive Corrected Normal Plot Logic ---
+  
+  # --- END: Definitive Corrected Normal Distribution Logic ---
   
   ## --- ADDED FOR BINOMIAL SUMMARY --- ##
   output$binom_summary_stats <- renderPrint({
