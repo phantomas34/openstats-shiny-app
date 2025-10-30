@@ -17,6 +17,8 @@ library(readxl)
 library(shinyWidgets)
 library(bsicons)
 library(rsconnect)
+library(shinyjs)
+library(shinycssloaders)
 # --- bslib Theme Definitions ---
 light_theme <- bs_theme(version = 5)
 dark_theme <- bs_theme(version = 5, bootswatch = "darkly")

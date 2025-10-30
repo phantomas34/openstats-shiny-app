@@ -1,4 +1,4 @@
-# server.R
+# server.R (Corrected Version - Replace your entire file with this)
 
 server <- function(input, output, session) {
   
@@ -261,11 +261,9 @@ server <- function(input, output, session) {
   observe({
     df <- data_r()
     numeric_cols <- if (is.null(df)) "" else names(df)[sapply(df, is.numeric)]
-    c# --- START: New, Smarter Categorical Column Logic ---
     char_factor_cols <- if (is.null(df)) "" else names(df)[sapply(df, function(x) {
       is.character(x) || is.factor(x) || (is.numeric(x) && length(unique(x)) < 15)
     })]
-    # --- END: New, Smarter Categorical Column Logic ---
     
     # Mean Tests Panel
     output$select_ht_variable <- renderUI({ selectInput("ht_variable", "Select Variable for t-test (Numeric)", choices = c("", numeric_cols)) })
@@ -287,8 +285,6 @@ server <- function(input, output, session) {
     output$prop_variable_ui <- renderUI({ selectInput("prop_variable", "Select a categorical variable:", choices = c("", char_factor_cols)) })
     output$two_prop_var_ui <- renderUI({ selectInput("prop_var", "Select Proportion Variable:", choices = c("", char_factor_cols)) })
     output$two_prop_group_var_ui <- renderUI({ selectInput("two_prop_group_var", "Select Grouping Variable:", choices = c("", char_factor_cols)) })
- 
-    # --- START: New Dropdowns for Non-Parametric Tests ---
     
     # Mann-Whitney U Test
     output$select_mw_variable <- renderUI({ selectInput("mw_variable", "Numeric Variable:", choices = c("", numeric_cols)) })
@@ -298,9 +294,7 @@ server <- function(input, output, session) {
     output$select_kw_variable <- renderUI({ selectInput("kw_variable", "Numeric Variable:", choices = c("", numeric_cols)) })
     output$select_kw_group    <- renderUI({ selectInput("kw_group", "Grouping Variable (2+ levels):", choices = c("", char_factor_cols)) })
     
-    # --- END: New Dropdowns for Non-Parametric Tests ---
-    
-     })
+  })
   
   # Observer for One-Proportion Test's 'Success Value' dropdown
   observe({
@@ -340,143 +334,131 @@ server <- function(input, output, session) {
   observeEvent(input$analyze_descriptive, {
     df <- data_r()
     
-    # --- START: Final Corrected Summary/Distribution Table Logic ---
-    
-    # --- START: Definitive Corrected Summary/Distribution Table Logic ---
-    
-    output$summary_stats_output <- renderPrint({
-      req(df, input$descriptive_variable)
+    # --- UPGRADED REPLACEMENT for output$summary_stats_output ---
+    output$summary_stats_output <- renderDT({
+      req(data_r(), input$descriptive_variable)
+      df <- data_r()
       var_name <- input$descriptive_variable
+      group_var <- input$ht_group_variabl
       
-      if (!(var_name %in% names(df))) {
-        cat("Please select a valid variable for descriptive statistics.\n")
-        return()
+      if (var_name == "") return(NULL) 
+      
+      is_categorical_like <- function(vec) {
+        is.character(vec) || is.factor(vec) || 
+          (is.numeric(vec) && length(unique(na.omit(vec))) < 15)
       }
       
-      is_categorical_like <- is.character(df[[var_name]]) || is.factor(df[[var_name]]) || 
-        (is.numeric(df[[var_name]]) && length(unique(na.omit(df[[var_name]]))) < 15)
-      
-      if (is_categorical_like) {
-        # --- Logic for CATEGORICAL variables ---
-        cat("Frequency Distribution Table:\n\n")
+      if (group_var != "None" && group_var %in% names(df)) {
+        var_is_cat <- is_categorical_like(df[[var_name]])
+        group_is_cat <- is_categorical_like(df[[group_var]])
         
-        summary_table <- df %>%
-          filter(!is.na(.data[[var_name]])) %>%
-          count(.data[[var_name]], name = "Frequency") %>%
-          mutate(Relative_Frequency = scales::percent(Frequency / sum(Frequency), accuracy = 0.1))
-        
-        # Convert to a standard data.frame for clean printing
-        print(as.data.frame(summary_table))
-        
-      } else {
-        # --- Logic for truly NUMERIC variables ---
-        cat("Descriptive Statistics:\n\n")
-        
-        group_var <- input$group_by_variable
-        if (group_var != "None" && group_var %in% names(df)) {
-          # --- Grouped NUMERIC summary ---
+        if (var_is_cat && group_is_cat) {
+          tbl <- table(df[[var_name]], df[[group_var]], dnn = c(var_name, group_var))
+          tbl_with_margins <- addmargins(tbl)
+          datatable(as.data.frame.matrix(tbl_with_margins), 
+                    options = list(dom = 't'),
+                    rownames = TRUE,
+                    caption = htmltools::tags$caption(style = 'caption-side: top; text-align: left;', 'Two-Way Contingency Table (Counts)'))
+          
+        } else if (!var_is_cat && group_is_cat) {
           grouped_summary <- df %>%
             group_by(.data[[group_var]]) %>%
             summarise(
               N = sum(!is.na(.data[[var_name]])),
-              Mean = mean(.data[[var_name]], na.rm = TRUE),
-              Median = median(.data[[var_name]], na.rm = TRUE),
-              SD = sd(.data[[var_name]], na.rm = TRUE),
-              Min = min(.data[[var_name]], na.rm = TRUE),
-              Q1 = as.numeric(quantile(.data[[var_name]], 0.25, na.rm = TRUE)),
-              Q3 = as.numeric(quantile(.data[[var_name]], 0.75, na.rm = TRUE)),
-              Max = max(.data[[var_name]], na.rm = TRUE)
+              Mean = round(mean(.data[[var_name]], na.rm = TRUE), 2),
+              Median = round(median(.data[[var_name]], na.rm = TRUE), 2),
+              SD = round(sd(.data[[var_name]], na.rm = TRUE), 2),
+              Min = round(min(.data[[var_name]], na.rm = TRUE), 2),
+              Q1 = round(as.numeric(quantile(.data[[var_name]], 0.25, na.rm = TRUE)), 2),
+              Q3 = round(as.numeric(quantile(.data[[var_name]], 0.75, na.rm = TRUE)), 2),
+              Max = round(max(.data[[var_name]], na.rm = TRUE), 2)
             )
-          
-          # --- THE DEFINITIVE FIX: Convert to data.frame before printing ---
-          print(as.data.frame(grouped_summary))
+          datatable(grouped_summary, 
+                    options = list(dom = 't'), 
+                    rownames = FALSE,
+                    caption = htmltools::tags$caption(style = 'caption-side: top; text-align: left;', 'Descriptive Statistics (Grouped)'))
           
         } else {
-          # --- Single NUMERIC summary ---
+          datatable(data.frame(Message = "This combination is not supported."), options = list(dom = 't'))
+        }
+        
+      } else {
+        if (is_categorical_like(df[[var_name]])) {
+          summary_table <- df %>%
+            filter(!is.na(.data[[var_name]])) %>%
+            count(.data[[var_name]], name = "Frequency") %>%
+            mutate(Relative_Frequency = scales::percent(Frequency / sum(Frequency), accuracy = 0.1))
+          
+          datatable(summary_table, 
+                    options = list(dom = 't'), 
+                    rownames = FALSE,
+                    caption = htmltools::tags$caption(style = 'caption-side: top; text-align: left;', 'Frequency Distribution Table'))
+          
+        } else {
           summary_df <- data.frame(
-            N = length(na.omit(df[[var_name]])),
-            Mean = mean(df[[var_name]], na.rm = TRUE),
-            Median = median(df[[var_name]], na.rm = TRUE),
-            SD = sd(df[[var_name]], na.rm = TRUE),
-            Min = min(df[[var_name]], na.rm = TRUE),
-            Q1 = as.numeric(quantile(df[[var_name]], 0.25, na.rm = TRUE)),
-            Q3 = as.numeric(quantile(df[[var_name]], 0.75, na.rm = TRUE)),
-            Max = max(df[[var_name]], na.rm = TRUE),
-            row.names = ""
+            Statistic = c("N", "Mean", "Median", "SD", "Min", "Q1", "Q3", "Max"),
+            Value = c(
+              length(na.omit(df[[var_name]])),
+              round(mean(df[[var_name]], na.rm = TRUE), 2),
+              round(median(df[[var_name]], na.rm = TRUE), 2),
+              round(sd(df[[var_name]], na.rm = TRUE), 2),
+              round(min(df[[var_name]], na.rm = TRUE), 2),
+              round(as.numeric(quantile(df[[var_name]], 0.25, na.rm = TRUE)), 2),
+              round(as.numeric(quantile(df[[var_name]], 0.75, na.rm = TRUE)), 2),
+              round(max(df[[var_name]], na.rm = TRUE), 2)
+            )
           )
-          print(summary_df)
+          datatable(summary_df, 
+                    options = list(dom = 't'), 
+                    rownames = FALSE,
+                    caption = htmltools::tags$caption(style = 'caption-side: top; text-align: left;', 'Descriptive Statistics'))
         }
       }
     })
     
-    # --- END: Definitive Corrected Summary/Distribution Table Logic ---
-    
-    # --- END: Final Corrected Summary/Distribution Table Logic ---
-    
-    # --- Replacement for Histogram Plot ---
-    
+    # --- REPLACEMENT for output$histogram_plot ---
     output$histogram_plot <- renderPlot({
+      df <- data_r()
       req(df, input$descriptive_variable)
       var <- input$descriptive_variable
-      group_var <- input$group_by_variable
-      validate(need(is.numeric(df[[var]]), "Histogram requires a numeric variable."))
       
-      # Determine the y-axis mapping based on user input from the new dropdown
-      y_axis_aes <- if (input$hist_yaxis_type == "density") aes(y = ..density..) else aes(y = ..count..)
-      y_axis_label <- if (input$hist_yaxis_type == "density") "Relative Frequency (Density)" else "Count (Frequency)"
+      validate(need(is.numeric(df[[var]]), "Histogram is for quantitative (numeric) variables only."))
       
-      # Build the plot
-      gg <- ggplot(df, aes(x = .data[[var]])) +
-        geom_histogram(y_axis_aes, # Apply the dynamic y-axis mapping here
-                       fill = "steelblue", 
-                       bins = ifelse(!is.null(input$hist_bins), input$hist_bins, 30))
+      y_formatter <- if (input$hist_yaxis_type == "percent") scales::percent_format(accuracy = 1) else NULL
       
-      # Add faceting for grouping (if selected)
-      if (group_var != "None" && group_var %in% names(df)) {
-        gg <- gg + facet_wrap(vars(.data[[group_var]]), scales = "free_y")
+      gg <- ggplot(df, aes(x = .data[[var]]))
+      
+      if (input$hist_yaxis_type == "percent") {
+        gg <- gg + geom_histogram(aes(y = ..count.. / sum(..count..)), 
+                                  bins = input$hist_bins, fill = "steelblue", color = "white")
+      } else {
+        gg <- gg + geom_histogram(bins = input$hist_bins, fill = "steelblue", color = "white")
       }
       
-      # Add labels and optional mean/median lines
-      gg <- gg + labs(title = paste("Histogram of", var), x = var, y = y_axis_label)
+      y_axis_label <- if (input$hist_yaxis_type == "percent") "Percent" else "Count (Frequency)"
+      
+      gg <- gg + 
+        scale_y_continuous(labels = y_formatter) +
+        labs(title = paste("Histogram of", var), x = var, y = y_axis_label)
       
       if (isTRUE(input$show_mean_median)) {
-        # This logic needs to be safe for grouped data
-        if (group_var != "None" && group_var %in% names(df)) {
-          summary_lines <- df %>% 
-            group_by(.data[[group_var]]) %>%
-            summarise(mean_val = mean(.data[[var]], na.rm = TRUE),
-                      median_val = median(.data[[var]], na.rm = TRUE))
-          gg <- gg + 
-            geom_vline(data = summary_lines, aes(xintercept = mean_val), color = "red", linetype = "dashed") +
-            geom_vline(data = summary_lines, aes(xintercept = median_val), color = "green", linetype = "dashed")
-        } else {
-          gg <- gg +
-            geom_vline(aes(xintercept = mean(df[[var]], na.rm = TRUE)), color = "red", linetype = "dashed") +
-            geom_vline(aes(xintercept = median(df[[var]], na.rm = TRUE)), color = "green", linetype = "dashed")
-        }
+        gg <- gg +
+          geom_vline(aes(xintercept = mean(df[[var]], na.rm = TRUE)), color = "red", linetype = "dashed") +
+          geom_vline(aes(xintercept = median(df[[var]], na.rm = TRUE)), color = "green", linetype = "dashed")
       }
       
       gg
     })
     
-    # --- End of Replacement Block ---
-    
-    # --- START: Replacement for Box Plot Logic ---
-    
-    # --- START: Definitive Corrected Box Plot Logic ---
-    
+    # --- Definitive Corrected Box Plot Logic ---
     output$boxplot_plot <- renderPlot({
       req(df, input$descriptive_variable)
       var_name <- input$descriptive_variable
       group_var <- input$group_by_variable
       
-      # Check if a numeric variable is selected
-      if (is.numeric(df[[var_name]])) {
+      if (!is.character(df[[var_name]]) && !is.factor(df[[var_name]])) {
         
-        # Check if a valid grouping variable is also selected
         if (group_var != "None" && group_var %in% names(df)) {
-          # --- PLOT A: GROUPED, VERTICAL BOX PLOTS ---
-          # This is the correct plot for Screenshot #1
           ggplot(df, aes(x = as.factor(.data[[group_var]]), y = .data[[var_name]], fill = as.factor(.data[[group_var]]))) +
             geom_boxplot() +
             labs(
@@ -487,8 +469,6 @@ server <- function(input, output, session) {
             theme(legend.position = "none")
           
         } else {
-          # --- PLOT B: SINGLE, HORIZONTAL BOX PLOT ---
-          # This is the correct plot for Screenshot #2
           ggplot(df, aes(x = .data[[var_name]])) +
             geom_boxplot(fill = "lightgreen") +
             labs(
@@ -501,18 +481,12 @@ server <- function(input, output, session) {
               axis.ticks.y = element_blank()
             )
         }
-        # This else handles the case of a non-numeric variable where a boxplot is not appropriate.
       } else {
-        # Return a blank plot with a message
         ggplot() +
           annotate("text", x = 0, y = 0, label = "Box plot requires a numeric variable.", size = 5) +
           theme_void()
       }
     })
-    
-    # --- END: Definitive Corrected Box Plot Logic ---
-    
-    # --- END: Replacement for Box Plot Logic ---
     
     output$density_plot <- renderPlot({
       req(df, input$descriptive_variable)
@@ -613,8 +587,6 @@ server <- function(input, output, session) {
     var <- input$dot_plot_variable
     validate(need(is.numeric(df[[var]]), "Dot plot requires a numeric variable."))
     
-    # --- START OF DEFINITIVE FIX ---
-    
     data_vec <- na.omit(df[[var]])
     
     if (length(data_vec) < 2) {
@@ -626,7 +598,6 @@ server <- function(input, output, session) {
     data_range <- max(data_vec) - min(data_vec)
     dynamic_binwidth <- if (data_range == 0) 1 else data_range / 30
     
-    # Create the base plot object
     p_base <- ggplot(df, aes(x = .data[[var]])) +
       geom_dotplot(
         binaxis = 'x',
@@ -636,7 +607,6 @@ server <- function(input, output, session) {
         binwidth = dynamic_binwidth
       )
     
-    # Build the plot to find the max frequency for the y-axis
     built_p <- ggplot_build(p_base)
     max_freq <- max(built_p$data[[1]]$count)
     
@@ -646,7 +616,6 @@ server <- function(input, output, session) {
       1
     }
     
-    # Add the final layers for scales, labels, and an EXPLICIT theme override
     p_final <- p_base + 
       scale_y_continuous(
         breaks = y_breaks,
@@ -662,38 +631,23 @@ server <- function(input, output, session) {
         y = "Frequency"
       ) +
       theme_light() + 
-      
-      # THIS IS THE CRUCIAL OVERRIDE
-      # We are explicitly forcing the axis text to be drawn with a visible color and size.
-      # This will override any settings from thematic_shiny().
       theme(
-        axis.text.x = element_text(color = "gray30", size = 10, angle = 0), # Use a dark gray, size 10, no angle
-        axis.text.y = element_text(color = "gray30", size = 10), # Also force the y-axis text
-        
-        # Also ensure axis titles are visible
+        axis.text.x = element_text(color = "gray30", size = 10, angle = 0),
+        axis.text.y = element_text(color = "gray30", size = 10),
         axis.title = element_text(color = "gray30", size = 11),
-        
         panel.grid.minor = element_blank()
       )
     
-    # --- END OF DEFINITIVE FIX ---
-    
-    
     current_dot_plot(p_final) 
   })
-  # --- START: Corrected Bar Chart Logic ---
   
   output$barchart_plot <- renderPlot({
-    # --- THE FIX IS ON THIS LINE ---
-    df <- data_r() # Get the data from our reactive value first!
+    df <- data_r()
     
     req(df, input$descriptive_variable)
     var_name <- input$descriptive_variable
     
-    is_categorical_like <- is.character(df[[var_name]]) || is.factor(df[[var_name]]) || 
-      (is.numeric(df[[var_name]]) && length(unique(na.omit(df[[var_name]]))) < 15)
-    
-    validate(need(is_categorical_like, "Bar chart is for categorical or discrete numeric variables."))
+    validate(need(is.character(df[[var_name]]) || is.factor(df[[var_name]]), "Bar chart is for categorical (text) variables only."))
     
     df_summary <- df %>%
       filter(!is.na(.data[[var_name]])) %>%
@@ -717,8 +671,6 @@ server <- function(input, output, session) {
     
     gg
   })
-  
-  # --- END: Corrected Bar Chart Logic ---
   
   output$dot_plot <- renderPlot({
     req(current_dot_plot())
@@ -744,16 +696,13 @@ server <- function(input, output, session) {
   
   # --- All Inferential and Regression Logic ---
   
-  # --- START: Upgraded ANOVA Logic ---
-  
   observeEvent(input$run_anova, {
     df <- data_r()
     req(df, input$anova_dv, input$anova_iv)
     dv <- input$anova_dv
     iv1 <- input$anova_iv
-    iv2 <- input$anova_iv2 # Get the value from our new dropdown
+    iv2 <- input$anova_iv2
     
-    # --- Validation ---
     if (!is.numeric(df[[dv]])) {
       showNotification("Dependent variable must be numeric.", type = "warning")
       return(NULL)
@@ -763,24 +712,13 @@ server <- function(input, output, session) {
       return(NULL)
     }
     
-    # Make sure categorical variables are treated as factors for the model
     df[[iv1]] <- as.factor(df[[iv1]])
     
-    # --- Dynamic Model Building ---
     output$anova_output <- renderPrint({
       
-      # Check if a second IV was selected
       if (!is.null(iv2) && iv2 != "None") {
-        # --- TWO-WAY ANOVA LOGIC ---
-        # The incorrect check has been removed.
-        # This next line now handles both numeric-as-category and text variables correctly.
         df[[iv2]] <- as.factor(df[[iv2]])
         
-        # The "*" creates main effects for both IVs AND their interaction term
-        formula_str <- paste(dv, "~", iv1, "*", iv2)
-        model <- aov(as.formula(formula_str), data = df)
-        
-        # The "*" creates main effects for both IVs AND their interaction term
         formula_str <- paste(dv, "~", iv1, "*", iv2)
         model <- aov(as.formula(formula_str), data = df)
         
@@ -788,7 +726,6 @@ server <- function(input, output, session) {
         model_summary <- summary(model)
         print(model_summary)
         
-        # Check if any part of the model is significant
         if (any(model_summary[[1]]$`Pr(>F)` < 0.05, na.rm = TRUE)) {
           cat("\n-----------------------------------\n")
           cat("Post-Hoc Test (Tukey HSD):\n")
@@ -798,7 +735,6 @@ server <- function(input, output, session) {
         }
         
       } else {
-        # --- ONE-WAY ANOVA LOGIC (Original functionality) ---
         formula_str <- paste(dv, "~", iv1)
         model <- aov(as.formula(formula_str), data = df)
         
@@ -817,60 +753,75 @@ server <- function(input, output, session) {
     })
   })
   
-  # --- END: Upgraded ANOVA Logic ---
+  # --- START: FINAL REORDERED REPLACEMENT for observeEvent(input$run_prop_test, ...) ---
+  # This version moves the summary estimate to the bottom of the output.
+  
   observeEvent(input$run_prop_test, {
-    # This logic now handles both manual and data-driven modes
-    
-    if (isTRUE(input$prop_test_manual_mode)) {
-      # --- MANUAL MODE ---
-      req(input$prop_manual_successes, input$prop_manual_trials, input$prop_null)
+    output$prop_test_result <- renderPrint({
       
-      successes <- input$prop_manual_successes
-      total <- input$prop_manual_trials
-      
-      # Add validation for manual inputs
-      if (successes > total) {
-        showNotification("Error: Number of successes cannot be greater than the number of trials.", type = "error")
-        return()
-      }
-      
-      test <- prop.test(x = successes, n = total, p = input$prop_null, alternative = input$prop_alternative)
-      
-      output$prop_test_result <- renderPrint({
-        cat("One-Proportion Test (Manual Input)\n\n")
-        cat("Successes (x):", successes, "\n")
-        cat("Trials (n):", total, "\n\n")
-        print(test)
-      })
-      
-    } else {
-      # --- DATA-DRIVEN MODE (Original Logic) ---
-      df <- data_r()
-      req(df, input$prop_variable, input$success_value, input$prop_null)
-      
-      var <- input$prop_variable
-      success_val <- input$success_value
-      
-      successes <- sum(df[[var]] == success_val, na.rm = TRUE)
-      total <- sum(!is.na(df[[var]]))
-      
-      if (total == 0) {
-        output$prop_test_result <- renderPrint({
+      if (isTRUE(input$prop_test_manual_mode)) {
+        # --- MANUAL MODE ---
+        req(input$prop_manual_successes, input$prop_manual_trials, input$prop_null)
+        successes <- input$prop_manual_successes
+        total <- input$prop_manual_trials
+        p_null <- input$prop_null
+        
+        if (successes > total) {
+          cat("Error: Number of successes cannot be greater than the number of trials.")
+          return()
+        }
+        
+        sample_p <- successes / total
+        se <- sqrt(p_null * (1 - p_null) / total)
+        test <- prop.test(x = successes, n = total, p = p_null, alternative = input$prop_alternative)
+        
+        estimate_string <- paste0("Sample Estimate (p\U0302): ", round(sample_p, 4), " \U00B1 ", round(se, 4), " (SE)")
+        
+        # --- THE FIX: Reorder the print statements ---
+        cat("One-Proportion Test (Manual Input)\n")
+        print(test) # Print the main test results first
+        cat("\n----------------------------------\n") # Add a separator for clarity
+        cat(estimate_string) # Print the summary line at the bottom
+        # --- END FIX ---
+        
+      } else {
+        # --- DATA-DRIVEN MODE ---
+        df <- data_r()
+        req(df, input$prop_variable, input$success_value, input$prop_null)
+        var <- input$prop_variable
+        success_val <- input$success_value
+        p_null <- input$prop_null
+        
+        successes <- sum(df[[var]] == success_val, na.rm = TRUE)
+        total <- sum(!is.na(df[[var]]))
+        
+        if (total == 0) {
           cat("Error: No valid data for this variable.")
-        })
-        return()
-      }
-      
-      test <- prop.test(x = successes, n = total, p = input$prop_null, alternative = input$prop_alternative)
-      
-      output$prop_test_result <- renderPrint({
+          return()
+        }
+        
+        sample_p <- successes / total
+        se <- sqrt(p_null * (1 - p_null) / total)
+        test <- prop.test(x = successes, n = total, p = p_null, alternative = input$prop_alternative)
+        
+        estimate_string <- paste0("Sample Estimate (p\U0302): ", round(sample_p, 4), " \U00B1 ", round(se, 4), " (SE)")
+        
+        # --- THE FIX: Reorder the print statements ---
         cat("One-Proportion Test (from Dataset)\n")
-        cat("Variable:", var, "\n")
-        cat("Success Value:", success_val, "\n")
-        print(test)
-      })
-    }
+        cat("Variable:", var, "| Success Value:", success_val, "\n")
+        print(test) # Print the main test results first
+        cat("\n----------------------------------\n") # Add a separator for clarity
+        cat(estimate_string) # Print the summary line at the bottom
+        # --- END FIX ---
+      }
+    })
   })
+  
+  # --- END OF REPLACEMENT ---
+
+  
+  # --- START: FINAL, CORRECTED REPLACEMENT for observeEvent(input$run_two_prop_test, ...) ---
+  # This version fixes the validation logic for numeric categorical variables.
   
   observeEvent(input$run_two_prop_test, {
     df <- data_r()
@@ -882,14 +833,20 @@ server <- function(input, output, session) {
     group2 <- input$two_prop_group2
     success_val <- input$two_prop_success
     
-    if (!is.character(df[[prop_var]]) && !is.factor(df[[prop_var]])) {
-      output$two_prop_test_result <- renderPrint({"Proportion variable must be categorical."})
+    # --- THE FIX IS HERE: Smarter Validation Logic ---
+    is_categorical_like <- function(vec) {
+      is.character(vec) || is.factor(vec) || (is.numeric(vec) && length(unique(na.omit(vec))) < 15)
+    }
+    
+    if (!is_categorical_like(df[[prop_var]])) {
+      output$two_prop_test_result <- renderPrint({ "Proportion variable must be categorical or discrete numeric (e.g., 0/1)." })
       return(NULL)
     }
-    if (!is.character(df[[group_var]]) && !is.factor(df[[group_var]])) {
-      output$two_prop_test_result <- renderPrint({"Grouping variable must be categorical."})
+    if (!is_categorical_like(df[[group_var]])) {
+      output$two_prop_test_result <- renderPrint({ "Grouping variable must be categorical or discrete numeric (e.g., 0/1)." })
       return(NULL)
     }
+    # --- END OF FIX ---
     
     df[[prop_var]] <- as.factor(df[[prop_var]])
     df[[group_var]] <- as.factor(df[[group_var]])
@@ -913,54 +870,37 @@ server <- function(input, output, session) {
       return(NULL)
     }
     
+    p1 <- x1 / n1
+    p2 <- x2 / n2
+    se1 <- sqrt(p1 * (1 - p1) / n1)
+    se2 <- sqrt(p2 * (1 - p2) / n2)
+    
     output$two_prop_test_result <- renderPrint({
       cat("Two-Proportion Test\n\n")
-      cat("Group 1:", group1, "| Successes:", x1, "/", n1, "\n")
-      cat("Group 2:", group2, "| Successes:", x2, "/", n2, "\n\n")
+      cat("Group 1:", group1, "| Successes:", x1, "/", n1, "| SE:", round(se1, 4), "\n")
+      cat("Group 2:", group2, "| Successes:", x2, "/", n2, "| SE:", round(se2, 4), "\n\n")
       print(prop.test(x = c(x1, x2), n = c(n1, n2), alternative = input$two_prop_alternative))
     })
   })
   
+  # --- END OF REPLACEMENT ---
+  # --- START: FINAL, ROBUST REPLACEMENT for observeEvent(input$run_ht, ...) ---
+  
   observeEvent(input$run_ht, {
     req(data_r(), input$ht_variable)
-    
     df <- data_r()
     var_name <- input$ht_variable
+    
+    shiny::validate(
+      shiny::need(is.numeric(df[[var_name]]), "T-tests require a numeric variable. Please select a different variable (e.g., 'mpg').")
+    )
+    
     group_var <- input$ht_group_variable
     mu <- input$ht_mu
     
-    if (!(var_name %in% names(df))) {
-      showNotification("Selected variable not found in dataset.", type = "error")
-      return(NULL)
-    }
-    
-    if (is.character(df[[var_name]]) || is.logical(df[[var_name]]) || is.factor(df[[var_name]])) {
-      vals <- na.omit(df[[var_name]])
-      if (length(vals) > 0 && all(vals %in% c("Yes", "No"))) {
-        df[[var_name]] <- ifelse(df[[var_name]] == "Yes", 1, 0)
-      } else if (length(vals) > 0 && all(vals %in% c("TRUE", "FALSE", TRUE, FALSE))) {
-        df[[var_name]] <- ifelse(df[[var_name]] %in% c("TRUE", TRUE), 1, 0)
-      }
-    }
-    
-    if (!is.null(group_var) && group_var != "None" && group_var %in% names(df)) {
-      if (is.character(df[[group_var]]) || is.logical(df[[group_var]]) || is.factor(df[[group_var]])) {
-        vals <- na.omit(df[[group_var]])
-        if (length(vals) > 0 && all(vals %in% c("Yes", "No"))) {
-          df[[group_var]] <- factor(ifelse(df[[group_var]] == "Yes", "Yes", "No"))
-        } else if (length(vals) > 0 && all(vals %in% c("TRUE", "FALSE", TRUE, FALSE))) {
-          df[[group_var]] <- factor(ifelse(df[[group_var]] %in% c("TRUE", TRUE), "TRUE", "FALSE"))
-        }
-      }
-    }
-    
-    if (!is.numeric(df[[var_name]])) {
-      showNotification("Variable for t-test must be numeric or convertible (Yes/No, True/False).", type = "warning")
-      return(NULL)
-    }
-    
     output$ht_output <- renderPrint({
       if (!is.null(group_var) && group_var != "None" && group_var %in% names(df)) {
+        # --- TWO-SAMPLE T-TEST LOGIC ---
         df_filtered <- df %>% filter(!is.na(.data[[var_name]]), !is.na(.data[[group_var]]))
         df_filtered[[group_var]] <- as.factor(df_filtered[[group_var]])
         
@@ -969,18 +909,46 @@ server <- function(input, output, session) {
           return()
         }
         
-        cat("Two-Sample t-test\n-----------------\n")
-        print(t.test(as.formula(paste(var_name, "~", group_var)),
-                     data = df_filtered,
-                     alternative = input$ht_alternative,
-                     var.equal = input$ht_var_equal))
+        test_result <- t.test(as.formula(paste(var_name, "~", group_var)),
+                              data = df_filtered,
+                              alternative = input$ht_alternative,
+                              var.equal = input$ht_var_equal)
+        
+        # --- NEW ROBUST LOGIC FOR STANDARD ERROR ---
+        if (isTRUE(input$ht_var_equal)) {
+          # For Student's t-test, R provides the SE directly
+          se_diff <- test_result$stderr
+          cat("Two-Sample t-test (Student's)\n------------------------------\n")
+        } else {
+          # For Welch's t-test, we calculate it manually
+          mean_diff <- test_result$estimate[1] - test_result$estimate[2]
+          t_stat <- test_result$statistic
+          se_diff <- mean_diff / t_stat
+          cat("Two-Sample t-test (Welch's)\n----------------------------\n")
+        }
+        # --- END NEW LOGIC ---
+        
+        cat("Standard Error of Difference:", round(se_diff, 4), "\n\n")
+        print(test_result)
         
       } else {
+        # --- ONE-SAMPLE T-TEST LOGIC (Unchanged) ---
+        sample_data <- na.omit(df[[var_name]])
+        test_result <- t.test(sample_data, mu = mu, alternative = input$ht_alternative)
+        
+        n <- length(sample_data)
+        s <- sd(sample_data)
+        se <- s / sqrt(n)
+        
         cat("One-Sample t-test\n-----------------\n")
-        print(t.test(df[[var_name]], mu = mu, alternative = input$ht_alternative))
+        cat("Sample Mean:", round(test_result$estimate, 4), "\n")
+        cat("Standard Error:", round(se, 4), "\n\n")
+        print(test_result)
       }
     })
   })
+  
+  # --- END OF REPLACEMENT ---
   
   observeEvent(input$run_paired_ttest, {
     df <- data_r()
@@ -1014,27 +982,19 @@ server <- function(input, output, session) {
     })
   })
   
-  # --- START: Replacement for the Chi-Squared observeEvent ---
-  
-  # This observeEvent now only *triggers* the outputs to render. All the heavy lifting
-  # for table creation is done in the eventReactive we created in Step 1.
   observeEvent(input$run_chi_sq, {
     
-    # --- Output 1: The Two-Way Table ---
     output$chi_sq_table_output <- renderPrint({
-      # Get the table from our smart reactive engine
       contingency_table <- contingency_table_r()
-      req(contingency_table) # Stop if the table failed to build
+      req(contingency_table) 
       
       table_type <- input$chisq_table_type
       
       if (table_type == "counts") {
         cat("Two-Way Table (Observed Counts):\n\n")
-        # Use addmargins to show row/column totals for clarity
         print(addmargins(contingency_table))
         
       } else {
-        # Use prop.table for percentages
         prop_table <- switch(table_type,
                              "row_perc" = prop.table(contingency_table, margin = 1),
                              "col_perc" = prop.table(contingency_table, margin = 2),
@@ -1046,14 +1006,11 @@ server <- function(input, output, session) {
                         "total_perc" = "Two-Way Table (Total Percentages):\n\n")
         
         cat(title)
-        # Multiply by 100 and print rounded percentages
         print(round(prop_table * 100, 1))
       }
     })
     
-    # --- Output 2: The Chi-Squared Test Results ---
     output$chi_sq_test_output <- renderPrint({
-      # Get the same table from our smart reactive engine
       contingency_table <- contingency_table_r()
       req(contingency_table)
       
@@ -1090,24 +1047,16 @@ server <- function(input, output, session) {
     })
   })
   
-  # --- END: Replacement for the Chi-Squared observeEvent ---
-  
-  # --- START: Definitive Corrected Reactive for Smart Table Creation ---
-  
   contingency_table_r <- eventReactive(input$run_chi_sq, {
     df <- data_r()
     req(df, input$chi_x, input$chi_y)
     x_var <- input$chi_x
     y_var <- input$chi_y
     
-    # --- THE DEFINITIVE FIX is in this validation section ---
-    
-    # Define our "is_categorical_like" helper logic right here
     is_cat <- function(var) {
       is.character(var) || is.factor(var) || (is.numeric(var) && length(unique(na.omit(var))) < 15)
     }
     
-    # Use the smart validation check
     if (!is_cat(df[[x_var]])) {
       showNotification("Row variable must be categorical or discrete numeric (fewer than 15 unique values).", type = "warning", duration = 8)
       return(NULL)
@@ -1116,8 +1065,6 @@ server <- function(input, output, session) {
       showNotification("Column variable must be categorical or discrete numeric (fewer than 15 unique values).", type = "warning", duration = 8)
       return(NULL)
     }
-    
-    # --- The rest of the logic is the same ---
     
     df_filtered <- df %>%
       filter(!is.na(.data[[x_var]]) & !is.na(.data[[y_var]]))
@@ -1130,12 +1077,9 @@ server <- function(input, output, session) {
       formula_str <- paste("Freq ~", x_var, "+", y_var)
       xtabs(as.formula(formula_str), data = df_filtered)
     } else {
-      # Coerce to factor here to ensure table() works on numeric-as-category
       table(as.factor(df_filtered[[x_var]]), as.factor(df_filtered[[y_var]]))
     }
   })
-  
-  # --- END: Definitive Corrected Reactive ---
   
   observeEvent(input$check_normality, {
     df <- data_r()
@@ -1169,8 +1113,6 @@ server <- function(input, output, session) {
     })
   })
   
-  # --- START: Updated eventReactive with Transformation Logic ---
-  
   regression_model_r <- eventReactive(input$run_regression, {
     df <- data_r()
     req(df, input$regression_dv, input$regression_iv)
@@ -1178,27 +1120,21 @@ server <- function(input, output, session) {
     dv <- input$regression_dv
     ivs <- input$regression_iv
     
-    # --- NEW: Transformation Logic ---
-    # Create a temporary data frame for this model to avoid changing the original data
     df_model <- df 
     
     if (isTRUE(input$log_transform_dv_reg)) {
-      # Check for non-positive values before transforming
       if (any(df_model[[dv]] <= 0, na.rm = TRUE)) {
-        # Use log1p(x) which is log(x+1) - safer for data with zeros
         showNotification(
           "Warning: Dependent variable contains 0 or negative values. Using log(x+1) transformation.",
           type = "warning",
-          duration = 8 # Show for 8 seconds
+          duration = 8
         )
         df_model[[dv]] <- log1p(df_model[[dv]])
       } else {
         df_model[[dv]] <- log(df_model[[dv]])
       }
     }
-    # --- END: Transformation Logic ---
     
-    # --- Input Validation (now uses the potentially modified df_model for the DV check) ---
     if (!is.numeric(df_model[[dv]])) {
       showNotification("Dependent variable must be numeric.", type = "warning")
       return(NULL)
@@ -1212,20 +1148,15 @@ server <- function(input, output, session) {
       return(NULL)
     }
     
-    # --- Model Calculation (now uses df_model) ---
     formula_str <- paste(dv, "~", paste(ivs, collapse = " + "))
     model <- lm(as.formula(formula_str), data = df_model)
     
     return(model)
   })
   
-  # --- END: Updated eventReactive ---
-  
-  # --- Output 1: The Regression Summary Tab ---
-  # This render function now pulls from our reactive model object.
   output$regression_summary <- renderPrint({
     model <- regression_model_r()
-    req(model) # Ensures the model is valid before trying to print
+    req(model)
     
     model_summary <- summary(model)
     r_squared <- model_summary$r.squared
@@ -1234,43 +1165,32 @@ server <- function(input, output, session) {
     print(model_summary)
     cat("\n")
     cat("R-squared:", round(r_squared, 4), "\n")
-    # Only show 'R' for simple linear regression (one IV)
     if (length(all.vars(formula(model))) == 2) {
       cat("R (correlation):", round(sqrt(r_squared), 4), "\n")
     }
   })
   
-  # --- Output 2: The NEW Diagnostic Plots Tab ---
   output$regression_diagnostic_plots <- renderPlot({
     model <- regression_model_r()
     req(model)
     
-    # Set up a 2x2 grid for the plots
     par(mfrow = c(2, 2))
-    
-    # This single command automatically generates the 4 standard diagnostic plots
     plot(model)
-    
-    # Always reset the plotting layout back to a 1x1 grid
     par(mfrow = c(1, 1))
   })
   
-  # --- Output 3: The NEW Assumption Checks Tab ---
   output$regression_assumption_checks <- renderPrint({
     model <- regression_model_r()
     req(model)
     
-    # Get the names of the independent variables from the model object
     ivs <- all.vars(formula(model))[-1] 
     
-    # VIF is only applicable for multiple regression (2 or more IVs)
     if (length(ivs) > 1) {
       cat("Variance Inflation Factor (VIF):\n")
       cat("---------------------------------\n")
       cat("Rule of thumb: VIF > 5 suggests potential multicollinearity.\n")
       cat("VIF > 10 suggests probable multicollinearity.\n\n")
       
-      # The 'car' library is already loaded from global.R
       vif_results <- car::vif(model)
       print(vif_results)
     } else {
@@ -1278,8 +1198,6 @@ server <- function(input, output, session) {
       cat("It is a measure of multicollinearity among two or more independent variables.")
     }
   })
-  
-  # --- END: New, Upgraded Regression Logic ---
   
   observeEvent(input$run_correlation, {
     df <- data_r()
@@ -1295,7 +1213,6 @@ server <- function(input, output, session) {
       print(round(corr_matrix, 4))
     })
   })
-  # --- START: New Logistic Regression Logic ---
   
   observeEvent(input$run_logistic, {
     df <- data_r()
@@ -1304,24 +1221,19 @@ server <- function(input, output, session) {
     dv <- input$logistic_dv
     ivs <- input$logistic_iv
     
-    # --- Validation ---
     df_model <- df %>% select(all_of(c(dv, ivs))) %>% na.omit()
     
-    # Ensure the DV is binary (has exactly 2 unique levels)
     unique_dv <- unique(df_model[[dv]])
     if (length(unique_dv) != 2) {
       showNotification("Dependent variable for logistic regression must have exactly two unique outcomes (e.g., Yes/No, 1/0, True/False).", type = "error", duration = 10)
       return(NULL)
     }
     
-    # Convert DV to a factor to ensure glm() works correctly
     df_model[[dv]] <- as.factor(df_model[[dv]])
     
-    # --- Model Calculation ---
     output$logistic_summary <- renderPrint({
       formula_str <- paste(dv, "~", paste(ivs, collapse = " + "))
       
-      # Use glm() with family = "binomial" for logistic regression
       model <- glm(as.formula(formula_str), data = df_model, family = "binomial")
       
       model_summary <- summary(model)
@@ -1336,24 +1248,18 @@ server <- function(input, output, session) {
       cat(" - Odds Ratio > 1: Increases the odds of the outcome.\n")
       cat(" - Odds Ratio < 1: Decreases the odds of the outcome.\n\n")
       
-      # Calculate and print odds ratios
       odds_ratios <- exp(coef(model))
       print(odds_ratios)
     })
   })
   
-  # --- END: New Logistic Regression Logic ---
-  
-  # --- START: Definitive Replacement for Basic Probability Logic ---
-  
   observeEvent(input$calculate_basic_probs, {
     calc_type <- input$prob_calc_type
     
-    # Clear previous outputs
     output$calculated_output_title <- renderPrint({ "" })
     output$calculated_output <- renderPrint({ "" })
     
-    tryCatch({ # --- Wrap all logic in a tryCatch block ---
+    tryCatch({
       
       if (calc_type == "union") {
         req(input$prob_A_union, input$prob_B_union, input$prob_A_and_B_union)
@@ -1372,9 +1278,8 @@ server <- function(input, output, session) {
       } else if (calc_type == "conditional") {
         req(input$prob_A_cond, input$prob_B_cond)
         P_A_and_B <- input$prob_A_cond
-        P_B <- input$prob_B_cond # The Condition
+        P_B <- input$prob_B_cond
         
-        # --- THE FIX: Explicitly check for P(B) <= 0 ---
         if (P_B <= 0) {
           stop("P(B) (the given condition) cannot be zero or less.")
         }
@@ -1417,15 +1322,13 @@ server <- function(input, output, session) {
         })
       }
       
-    }, error = function(e) { # --- This 'catch' block runs IF an error occurs ---
+    }, error = function(e) { 
       output$calculated_output_title <- renderPrint({ cat("Error in Calculation") })
       output$calculated_output <- renderPrint({
         cat(paste("An error occurred:", e$message))
       })
     })
   })
-  
-  # --- END: Definitive Replacement for Basic Probability Logic ---
   
   output$normal_inputs <- renderUI({
     req(input$normal_prob_type)
@@ -1442,8 +1345,6 @@ server <- function(input, output, session) {
       )
     }
   })
-  
-  # --- START: New Logic for Dynamic Probability Inputs ---
   
   output$prob_required_inputs <- renderUI({
     calc_type <- input$prob_calc_type
@@ -1468,11 +1369,6 @@ server <- function(input, output, session) {
     }
   })
   
-  # --- END: New Logic for Dynamic Probability Inputs ---
-  
-  # --- START: Definitive Corrected Normal Distribution Logic ---
-  
-  # Block 1: The Calculation (runs ONLY on button press)
   observeEvent(input$calc_normal, {
     req(input$normal_mean, input$normal_sd, input$normal_prob_type)
     
@@ -1512,10 +1408,7 @@ server <- function(input, output, session) {
     output$normal_result <- renderPrint({ result_text })
   })
   
-  # --- START: Definitive Corrected Normal Plot Logic ---
-  
   output$normal_plot <- renderPlot({
-    # This plot only requires mean and sd to draw the basic curve.
     req(input$normal_mean, input$normal_sd)
     
     mean_val <- input$normal_mean
@@ -1530,10 +1423,7 @@ server <- function(input, output, session) {
         x = "X", y = "Density"
       )
     
-    # --- THE DEFINITIVE FIX is this restructured if/else block ---
-    # It prioritizes the checkbox and has its own internal validation (req).
     if (isTRUE(input$show_empirical_rule)) {
-      # Define the SD boundaries
       one_sd_lower <- mean_val - sd_val
       one_sd_upper <- mean_val + sd_val
       two_sd_lower <- mean_val - 2 * sd_val
@@ -1541,13 +1431,11 @@ server <- function(input, output, session) {
       three_sd_lower <- mean_val - 3 * sd_val
       three_sd_upper <- mean_val + 3 * sd_val
       
-      # Add shaded areas for each region
       gg <- gg +
         geom_area(data = subset(df, x >= three_sd_lower & x <= three_sd_upper), aes(y = y), fill = "lightblue", alpha = 0.5) +
         geom_area(data = subset(df, x >= two_sd_lower & x <= two_sd_upper), aes(y = y), fill = "cornflowerblue", alpha = 0.5) +
         geom_area(data = subset(df, x >= one_sd_lower & x <= one_sd_upper), aes(y = y), fill = "royalblue", alpha = 0.5) +
         
-        # Add text annotations
         annotate("text", x = mean_val, y = dnorm(mean_val, mean_val, sd_val) * 0.5, label = "68%", color = "white", size = 5) +
         annotate("text", x = mean_val - 1.5 * sd_val, y = dnorm(mean_val - 1.5 * sd_val, mean_val, sd_val) * 0.2, label = "95%", size = 5) +
         annotate("text", x = mean_val + 1.5 * sd_val, y = dnorm(mean_val + 1.5 * sd_val, mean_val, sd_val) * 0.2, label = "95%", size = 5) +
@@ -1555,7 +1443,6 @@ server <- function(input, output, session) {
         annotate("text", x = mean_val + 2.5 * sd_val, y = dnorm(mean_val + 2.5 * sd_val, mean_val, sd_val) * 0.2, label = "99.7%", size = 5)
       
     } else {
-      # Original logic for shading, now with its OWN validation inside the else block
       prob_type <- input$normal_prob_type
       
       if (prob_type == "less") {
@@ -1578,17 +1465,11 @@ server <- function(input, output, session) {
     gg
   })
   
-  # --- END: Definitive Corrected Normal Plot Logic ---
-  
-  # --- END: Definitive Corrected Normal Distribution Logic ---
-  
-  ## --- ADDED FOR BINOMIAL SUMMARY --- ##
   output$binom_summary_stats <- renderPrint({
     req(input$binom_size, input$binom_prob)
     n <- input$binom_size
     p <- input$binom_prob
     
-    # Validate inputs
     if (n < 1 || p < 0 || p > 1) {
       cat("Invalid parameters: n must be >= 1 and p must be between 0 and 1.")
       return()
@@ -1604,7 +1485,6 @@ server <- function(input, output, session) {
       "Standard Deviation (\u03c3): ", round(std_dev, 4), sep = ""
     )
   })
-  ## --- END ADDED --- ##
   
   observeEvent(input$calc_binom_prob, {
     req(input$binom_size, input$binom_prob, input$binom_k)
@@ -1658,12 +1538,11 @@ server <- function(input, output, session) {
            x = "Number of Successes (x)", y = "Probability") +
       scale_x_continuous(breaks = x_vals)
   })
-  ## --- ADDED FOR POISSON SUMMARY --- ##
+  
   output$pois_summary_stats <- renderPrint({
     req(input$pois_lambda)
     lambda <- input$pois_lambda
     
-    # Validate input
     if (lambda <= 0) {
       cat("Invalid parameter: Lambda (\u03bb) must be positive.")
       return()
@@ -1679,7 +1558,6 @@ server <- function(input, output, session) {
       "Standard Deviation (\u03c3): ", round(std_dev, 4), sep = ""
     )
   })
-  ## --- END ADDED --- ##
   
   observeEvent(input$calc_pois_prob, {
     req(input$pois_lambda, input$pois_k)
@@ -1714,9 +1592,7 @@ server <- function(input, output, session) {
            x = "Number of Events (k)", y = "Probability") +
       scale_x_continuous(breaks = x_vals[x_vals %% 1 == 0])
   })
-  # --- START: New Logic for Non-Parametric Analyses ---
   
-  # --- Mann-Whitney U Test Logic ---
   observeEvent(input$run_mw_test, {
     df <- data_r()
     req(df, input$mw_variable, input$mw_group)
@@ -1724,7 +1600,6 @@ server <- function(input, output, session) {
     dv <- input$mw_variable
     iv <- input$mw_group
     
-    # Validation
     df_clean <- df %>% filter(!is.na(.data[[dv]]) & !is.na(.data[[iv]]))
     df_clean[[iv]] <- as.factor(df_clean[[iv]])
     
@@ -1743,7 +1618,6 @@ server <- function(input, output, session) {
     })
   })
   
-  # --- Kruskal-Wallis Test Logic ---
   observeEvent(input$run_kw_test, {
     df <- data_r()
     req(df, input$kw_variable, input$kw_group)
@@ -1751,7 +1625,6 @@ server <- function(input, output, session) {
     dv <- input$kw_variable
     iv <- input$kw_group
     
-    # Validation
     df_clean <- df %>% filter(!is.na(.data[[dv]]) & !is.na(.data[[iv]]))
     if(nrow(df_clean) < 1) {
       showNotification("No valid data for the selected variables.", type = "error")
@@ -1767,7 +1640,5 @@ server <- function(input, output, session) {
       print(test_result)
     })
   })
-  
-  # --- END: New Logic for Non-Parametric Analyses ---
   
 }

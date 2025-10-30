@@ -5,6 +5,7 @@ light_theme <- bs_theme(version = 5)
 dark_theme <- bs_theme(version = 5, bootswatch = "darkly")
 
 ui <- page_sidebar(
+  useShinyjs(),
   title = "OpenStat Web App",
   
   sidebar = sidebar(
@@ -64,7 +65,7 @@ ui <- page_sidebar(
                        ),
                        card(
                          card_header("Summary Statistics"),
-                         verbatimTextOutput("summary_stats_output")
+                         DTOutput("summary_stats_output")
                        )
                      ),
                      
@@ -77,7 +78,7 @@ ui <- page_sidebar(
                          numericInput("hist_bins", "Number of Bins", value = 30, min = 5, max = 100),
                          selectInput("hist_yaxis_type", "Y-Axis Represents:",
                                      choices = c("Count (Frequency)" = "count",
-                                                 "Proportion (Relative Frequency)" = "density")),
+                                                 "Percent" = "percent")),
                          plotOutput("histogram_plot")
                        ),
                        card(

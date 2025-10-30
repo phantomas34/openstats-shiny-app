@@ -1,25 +1,26 @@
-# Use a trusted, modern version of R from the Rocker project
-# This base image comes with many helpful system libraries pre-installed
-FROM rocker/r-ver:latest
+# 1. Use the correct, stable R version we discovered
+FROM rocker/r-ver:4.4.0
 
-# Install essential system libraries that some R packages might need
-# This prevents many common installation errors
-RUN apt-get update && apt-get install -y \
-    libcurl4-openssl-dev \
+# 2. Install system dependencies that shiny2docker identified as necessary
+RUN apt-get update -y && apt-get install -y \
+    make \
+    pandoc \
     libssl-dev \
-    libxml2-dev \
+    libicu-dev \
+    cmake \
+    libcurl4-openssl-dev \
+    zlib1g-dev \
     && rm -rf /var/lib/apt/lists/*
 
-
-RUN R -e "install.packages(c('shiny', 'bslib', 'thematic', 'DT', 'ggplot2', 'dplyr', 'tidyr', 'rhandsontable', 'car', 'psych', 'scales', 'readxl', 'shinyWidgets', 'bsicons'))"
-
-# Copy your application code into the container
-# The '.' means copy everything from the current folder
+# 3. Copy the entire project ONCE. The .dockerignore will handle exclusions.
 COPY . .
 
-# Tell Docker that your app will be listening on port 3838
+# 4. NOW, install renv and restore the library. Nothing will overwrite it after this.
+RUN R -e "install.packages('renv')"
+RUN R -e "renv::restore()"
+
+# 5. Expose the port
 EXPOSE 3838
 
-# The final command to run your app
-# This hard-codes the port, which is best practice for Docker
+# 6. Run the app
 CMD ["R", "-e", "shiny::runApp('.', host='0.0.0.0', port=3838)"]

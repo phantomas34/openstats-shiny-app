@@ -1,12 +1,9 @@
-# Ignore renv files to prevent conflicts inside the container
-renv.lock
-renv/
-.Rprofile
+# Ignore the renv library, which is specific to the host machine
+renv/library/
+renv/staging/
+renv/temp/
 
-# Ignore local user files
+# Also ignore other user-specific files
 .Rproj.user/
 .Rhistory
-
-# Ignore git files
-.gitignore
-.git/
+.RData
